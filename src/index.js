@@ -6,6 +6,18 @@ const app = express()
 app.use(cors())
 app.use(express.json())
 
+// jaccard function
+function jaccardScore(userSkills, postSkills) {
+  const a = new Set(userSkills)
+  const b = new Set(postSkills)
+  if (a.size === 0 && b.size === 0) return 0
+
+  const intersection = [...a].filter(x => b.has(x)).length
+  const union = new Set([...a, ...b]).size
+
+  return Math.round((intersection / union) * 100)
+}
+
 
 app.get('/', (req, res) => {
   res.json({ message: 'uw-plork API is running!' })
@@ -32,6 +44,16 @@ app.post('/users', async (req, res) => {
 app.get('/users', async (req, res) => {
   const [users] = await db.execute('SELECT * FROM users')
   res.json(users)
+})
+
+// Get single user
+app.get('/users/:id', async (req, res) => {
+  const [users] = await db.execute(
+    'SELECT * FROM users WHERE id = ?',
+    [req.params.id]
+  )
+  if (!users.length) return res.status(404).json({ error: 'User not found' })
+  res.json(users[0])
 })
 
 
@@ -68,6 +90,45 @@ app.get('/posts/:id', async (req, res) => {
     [req.params.id]
   )
   res.json(posts[0])
+})
+
+/* compatibility scores */
+app.get('/feed/:user_id', async (req, res) => {
+  // Fetch the logged in user
+  const [users] = await db.execute(
+    'SELECT * FROM users WHERE id = ?',
+    [req.params.user_id]
+  )
+  if (!users.length) return res.status(404).json({ error: 'User not found' })
+
+  const user = users[0]
+  const userSkills    = JSON.parse(user.skills    || '[]')
+  const userInterests = JSON.parse(user.interests || '[]')
+
+  // Fetch all posts (excluding the user's own)
+  const [posts] = await db.execute(`
+    SELECT p.*, u.name as poster_name, u.discipline, u.year
+    FROM posts p
+    JOIN users u ON p.poster_id = u.id
+    WHERE p.poster_id != ?
+    ORDER BY p.created_at DESC
+  `, [req.params.user_id])
+
+  // Score each post
+  const scored = posts.map(post => {
+    const postSkills = JSON.parse(post.skills_needed || '[]')
+
+    const skillScore    = jaccardScore(userSkills, postSkills)
+    const interestScore = jaccardScore(userInterests, postSkills) // interests vs skills needed
+    const finalScore    = Math.round((skillScore * 0.7) + (interestScore * 0.3))
+
+    return { ...post, compatibility_score: finalScore }
+  })
+
+  // Sort highest score first
+  scored.sort((a, b) => b.compatibility_score - a.compatibility_score)
+
+  res.json({ user: user.name, listings: scored })
 })
 
 // Application
