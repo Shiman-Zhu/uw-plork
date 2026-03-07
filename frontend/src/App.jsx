@@ -553,13 +553,54 @@ function MainApp() {
   const [showProfile, setShowProfile] = useState(false);
   const [profile, setProfile] = useState(INIT_PROFILE);
 
-  const items = mode === "BUILD" ? projects : activities;
+  //added
+  const [scoredProjects, setScoredProjects] = useState(INIT_PROJECTS);
+  const [scoredActivities, setScoredActivities] = useState(INIT_ACTIVITIES);
+
+  useEffect(() => {
+    const userId = 1; // replace with your actual logged-in user id from auth
+    
+    fetch(`http://localhost:3000/feed/${userId}`)
+      .then(r => r.json())
+      .then(data => {
+        // Backend returns all posts with compatibility_score
+        // Split them into projects vs activities by category
+        const allScored = data.listings;
+
+        setScoredProjects(prev => prev.map(p => {
+          const match = allScored.find(s => s.id === p.id);
+          return match ? { ...p, match: match.compatibility_score } : p;
+        }));
+
+        setScoredActivities(prev => prev.map(a => {
+          const match = allScored.find(s => s.id === a.id);
+          return match ? { ...a, match: match.compatibility_score } : a;
+        }));
+      })
+      .catch(() => {
+        // silently fall back to hardcoded scores if backend is offline
+      });
+  }, []);  // end of added
+
+  const items = mode === "BUILD" ? scoredProjects : scoredActivities;
   const filtered = filter === "YOURS" ? items.filter(i => i.yours) : items;
   const sel = items.find(i => i.id === selectedId) || items[0];
   const openRoles = sel?.roles?.filter(r => !r.filled) || [];
   const filledRoles = sel?.roles?.filter(r => r.filled) || [];
   const switchMode = m => { setMode(m); setSelectedId(m === "BUILD" ? 1 : 4); setTab(m === "BUILD" ? "ROLES" : "SPOTS"); setFilter("ALL"); };
-  const handlePost = item => { if (mode === "BUILD") { setProjects(p => [...p, item]); setSelectedId(item.id); setTab("ROLES"); } else { setActivities(a => [...a, item]); setSelectedId(item.id); setTab("SPOTS"); } };
+  const handlePost = item => {
+    if (mode === "BUILD") {
+      setProjects(p => [...p, item]);
+      setScoredProjects(p => [...p, item]); // keep in sync
+      setSelectedId(item.id);
+      setTab("ROLES");
+    } else {
+      setActivities(a => [...a, item]);
+      setScoredActivities(a => [...a, item]); // keep in sync
+      setSelectedId(item.id);
+      setTab("SPOTS");
+    }
+  };
 
   if (showProfile) return <ProfilePage profile={profile} onSave={p => { setProfile(p); }} onBack={() => setShowProfile(false)} />;
 
