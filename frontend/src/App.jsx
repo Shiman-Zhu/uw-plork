@@ -396,12 +396,15 @@ const INIT_ACTIVITIES = [
   { id:4, name:"BADMINTON", tagline:"Competitive doubles — looking for consistent partners", category:"SPORT", type:"COMPETITIVE", match:91, spots:2, terms:{ overlap:["W25","F25","W26"] }, tags:["Doubles","PAC","Competitive"], yours:false },
   { id:5, name:"JAZZ BAND", tagline:"Small ensemble, plays CIF events and campus shows",    category:"MUSIC", type:"RECREATIONAL", match:65, spots:3, terms:{ overlap:["S25","F25"]        }, tags:["Jazz","Brass","Casual"],      yours:false },
 ];
-const INIT_PROFILE = {
-  name:"Jamie Kim", email:"jkim@uwaterloo.ca", discipline:"ECE", year:"3A",
-  skills:["React","TypeScript","ML/AI","Python"], interests:["Badminton","Chess","Music"],
-  built:"Built a lane-detection model for Midnight Sun. Shipped a React dashboard for 500 users.",
-  terms:["W25","F25","W26"], commitment:"SERIOUS", github:"github.com/jkim",
-};
+
+// const INIT_PROFILE = {
+//   name:"Jamie Kim", email:"jkim@uwaterloo.ca", discipline:"ECE", year:"3A",
+//   skills:["React","TypeScript","ML/AI","Python"], interests:["Badminton","Chess","Music"],
+//   built:"Built a lane-detection model for Midnight Sun. Shipped a React dashboard for 500 users.",
+//   terms:["W25","F25","W26"], commitment:"SERIOUS", github:"github.com/jkim",
+// };
+
+
 const MOCK_APPLICATIONS = [
   { id:"app_001", projectId:1, projectName:"SOLARIS",    projectCategory:"HARDWARE", roleTitle:"Backend Developer", roleSkills:["Node.js","Python"],
     intro:"I'm a 3A ECE student with strong Node.js and Python experience. I've shipped 3 backend services in production and can commit 10hrs/week.",
