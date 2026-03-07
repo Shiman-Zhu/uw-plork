@@ -6,7 +6,7 @@ await db.execute(`
     id          INT AUTO_INCREMENT PRIMARY KEY,
     name        VARCHAR(255),
     email       VARCHAR(255) UNIQUE,
-    password    VARCHAR(255) NOT NULL,
+    password    VARCHAR(255),
     discipline  VARCHAR(50),
     year        VARCHAR(10),
     skills      JSON,
@@ -17,6 +17,19 @@ await db.execute(`
     created_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP
   )
 `);
+
+// Add password column if it doesn't exist (for existing tables)
+try {
+  await db.execute(`
+    ALTER TABLE users 
+    ADD COLUMN password VARCHAR(255)
+  `);
+  console.log("Password column added to existing table.");
+} catch (error) {
+  if (error.code !== "ER_DUP_FIELDNAME") {
+    console.error("Error adding password column:", error.message);
+  }
+}
 
 // "post"
 await db.execute(`
