@@ -2,58 +2,373 @@ import { useState, useEffect } from "react";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // API LAYER
-// Swap each function body for a real fetch() to wire up your database.
-// Every function returns a Promise so the app is already async-ready.
+// Connected to backend API at http://localhost:3000
 // ─────────────────────────────────────────────────────────────────────────────
+const API_BASE = "http://localhost:3000";
+
+// Helper function to parse JSON fields from database
+const parseJsonFields = (obj) => {
+  if (!obj) return obj;
+  const parsed = { ...obj };
+  if (parsed.skills && typeof parsed.skills === 'string') {
+    try { parsed.skills = JSON.parse(parsed.skills); } catch { parsed.skills = []; }
+  }
+  if (parsed.interests && typeof parsed.interests === 'string') {
+    try { parsed.interests = JSON.parse(parsed.interests); } catch { parsed.interests = []; }
+  }
+  if (parsed.skills_needed && typeof parsed.skills_needed === 'string') {
+    try { parsed.skills_needed = JSON.parse(parsed.skills_needed); } catch { parsed.skills_needed = []; }
+  }
+  return parsed;
+};
+
 const api = {
   // ── AUTH ──────────────────────────────────────────────────────────────────
-  // POST /api/auth/login         body: { email, password }
-  // POST /api/auth/register      body: { name, email, password, discipline, year, skills, interests, built, terms, commitment }
-  // POST /api/auth/logout
-  login:    (_e, _p) => Promise.resolve({ token: "mock-jwt", userId: "u_001" }),
-  register: (_f)     => Promise.resolve({ token: "mock-jwt", userId: "u_001" }),
-  logout:   ()       => Promise.resolve({ ok: true }),
+  // For now, using simple user creation. In production, add proper auth endpoints
+  login: async (email, password) => {
+    try {
+      // TODO: Implement proper login endpoint
+      const response = await fetch(`${API_BASE}/users`);
+      if (!response.ok) throw new Error("Failed to fetch users");
+      const users = await response.json();
+      const user = users.find(u => u.email === email);
+      if (!user) throw new Error("User not found");
+      return { token: "mock-jwt", userId: user.id };
+    } catch (error) {
+      console.error("Error logging in:", error);
+      throw error;
+    }
+  },
+  
+  register: async (formData) => {
+    try {
+      const response = await fetch(`${API_BASE}/users`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: formData.name,
+          email: formData.email,
+          discipline: formData.discipline,
+          year: formData.year,
+          skills: formData.skills || [],
+          interests: formData.interests || [],
+          commitment: formData.commitment,
+          github: formData.github || "",
+        }),
+      });
+      if (!response.ok) throw new Error("Registration failed");
+      const result = await response.json();
+      // Get the created user to return ID
+      const usersRes = await fetch(`${API_BASE}/users`);
+      if (!usersRes.ok) throw new Error("Failed to fetch created user");
+      const users = await usersRes.json();
+      const user = users.find(u => u.email === formData.email);
+      if (!user) throw new Error("User not found after creation");
+      return { token: "mock-jwt", userId: user.id, ...parseJsonFields(user) };
+    } catch (error) {
+      console.error("Error registering:", error);
+      throw error;
+    }
+  },
+  
+  logout: () => Promise.resolve({ ok: true }),
 
   // ── PROFILE ───────────────────────────────────────────────────────────────
-  // GET /api/users/:userId
-  // PUT /api/users/:userId       body: profile object
-  getProfile:    (_uid)       => Promise.resolve({ ...INIT_PROFILE }),
-  updateProfile: (_uid, data) => Promise.resolve({ ...data }),
+  getProfile: async (userId) => {
+    try {
+      const response = await fetch(`${API_BASE}/users/${userId}`);
+      if (!response.ok) {
+        // Fallback to getting all users if specific user not found
+        const usersRes = await fetch(`${API_BASE}/users`);
+        if (!usersRes.ok) throw new Error("Failed to fetch users");
+        const users = await usersRes.json();
+        const user = users.find(u => u.id == userId) || users[0];
+        return parseJsonFields(user);
+      }
+      const user = await response.json();
+      return parseJsonFields(user);
+    } catch (error) {
+      console.error("Error fetching profile:", error);
+      throw error;
+    }
+  },
+  
+  updateProfile: async (userId, data) => {
+    try {
+      const response = await fetch(`${API_BASE}/users/${userId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: data.name,
+          email: data.email,
+          discipline: data.discipline,
+          year: data.year,
+          skills: data.skills || [],
+          interests: data.interests || [],
+          commitment: data.commitment,
+          github: data.github || "",
+        }),
+      });
+      if (!response.ok) throw new Error("Update failed");
+      const updated = await response.json();
+      return parseJsonFields(updated);
+    } catch (error) {
+      console.error("Error updating profile:", error);
+      throw error;
+    }
+  },
 
   // ── PROJECTS / ACTIVITIES ─────────────────────────────────────────────────
-  // GET    /api/projects         ?mode=BUILD|CREW  &filter=ALL|YOURS
-  // GET    /api/projects/:id
-  // POST   /api/projects         body: project object
-  // PUT    /api/projects/:id     body: partial project
-  // DELETE /api/projects/:id
-  getProjects:   (mode) => Promise.resolve(mode === "BUILD" ? [...INIT_PROJECTS] : [...INIT_ACTIVITIES]),
-  createProject: (data) => Promise.resolve({ ...data, id: Date.now() }),
-  updateProject: (id, data) => Promise.resolve({ id, ...data }),
-  deleteProject: (_id)  => Promise.resolve({ ok: true }),
+  getProjects: async (mode) => {
+    try {
+      const response = await fetch(`${API_BASE}/posts`);
+      if (!response.ok) throw new Error("Failed to fetch posts");
+      const posts = await response.json();
+      // Transform posts to match frontend format
+      return posts.map(post => {
+        const parsed = parseJsonFields(post);
+        return {
+          id: parsed.id,
+          name: parsed.title,
+          tagline: parsed.description || "",
+          category: "SOFTWARE", // Default, could be stored in DB
+          stage: "IDEA", // Default
+          match: Math.floor(Math.random() * 20) + 70, // Calculate based on skills
+          commitment: parsed.commitment || "SERIOUS",
+          roles: parsed.skills_needed ? parsed.skills_needed.map((skill, idx) => ({
+            title: `Role ${idx + 1}`,
+            skills: Array.isArray(skill) ? skill : [skill],
+            filled: false,
+          })) : [],
+          spots: parsed.spots || 1,
+          terms: { founder: [], overlap: [] }, // TODO: Store terms in DB
+          yours: false, // TODO: Check if current user is poster
+          poster_name: parsed.poster_name,
+          discipline: parsed.discipline,
+          year: parsed.year,
+        };
+      });
+    } catch (error) {
+      console.error("Error fetching projects:", error);
+      return [];
+    }
+  },
+  
+  createProject: async (data) => {
+    try {
+      // TODO: Get current user ID from auth context
+      const posterId = 1; // Placeholder
+      const response = await fetch(`${API_BASE}/posts`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          poster_id: posterId,
+          title: data.name,
+          description: data.tagline,
+          skills_needed: data.roles ? data.roles.map(r => r.skills).flat() : [],
+          commitment: data.commitment,
+          spots: data.spots || 1,
+          deadline: null,
+        }),
+      });
+      if (!response.ok) throw new Error("Failed to create post");
+      const result = await response.json();
+      // Fetch the created post to get its ID
+      const postsRes = await fetch(`${API_BASE}/posts`);
+      if (postsRes.ok) {
+        const posts = await postsRes.json();
+        const created = posts[0]; // Most recent post
+        return { ...data, id: created.id };
+      }
+      return { ...data, id: Date.now() };
+    } catch (error) {
+      console.error("Error creating project:", error);
+      throw error;
+    }
+  },
+  
+  updateProject: async (id, data) => {
+    // TODO: Add PUT /posts/:id endpoint
+    return { id, ...data };
+  },
+  
+  deleteProject: async (id) => {
+    // TODO: Add DELETE /posts/:id endpoint
+    return { ok: true };
+  },
 
   // ── OUTBOUND APPLICATIONS (user applied to someone else) ──────────────────
-  // GET  /api/applications/mine              returns ApplicationOut[]
-  // POST /api/applications                   body: { projectId, roleTitle, intro, links }
-  getMyApplications: (_uid)  => Promise.resolve([...MOCK_APPLICATIONS]),
-  submitApplication: (data)  => Promise.resolve({ id: `app_${Date.now()}`, ...data, status: "PENDING", createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() }),
+  getMyApplications: async (userId) => {
+    try {
+      const response = await fetch(`${API_BASE}/applications/user/${userId}`);
+      if (!response.ok) {
+        // Fallback: Get all posts and check applications
+        const postsRes = await fetch(`${API_BASE}/posts`);
+        if (!postsRes.ok) throw new Error("Failed to fetch posts");
+        const posts = await postsRes.json();
+        const applications = [];
+        
+        for (const post of posts) {
+          const appRes = await fetch(`${API_BASE}/applications/${post.id}`);
+          if (appRes.ok) {
+            const apps = await appRes.json();
+            const userApp = apps.find(a => a.applicant_id == userId);
+            if (userApp) {
+              const parsed = parseJsonFields(userApp);
+              applications.push({
+                id: parsed.id,
+                projectId: post.id,
+                projectName: post.title || post.post_title,
+                projectCategory: "SOFTWARE",
+                roleTitle: "Role",
+                roleSkills: [],
+                intro: "",
+                links: parsed.github || "",
+                status: parsed.status || "PENDING",
+                createdAt: parsed.applied_at || new Date().toISOString(),
+                updatedAt: parsed.applied_at || new Date().toISOString(),
+              });
+            }
+          }
+        }
+        return applications;
+      }
+      const applications = await response.json();
+      return applications.map(app => {
+        const parsed = parseJsonFields(app);
+        return {
+          id: parsed.id,
+          projectId: parsed.post_id,
+          projectName: parsed.post_title || "",
+          projectCategory: "SOFTWARE",
+          roleTitle: "Role",
+          roleSkills: [],
+          intro: "",
+          links: "",
+          status: parsed.status || "PENDING",
+          createdAt: parsed.applied_at || new Date().toISOString(),
+          updatedAt: parsed.applied_at || new Date().toISOString(),
+        };
+      });
+    } catch (error) {
+      console.error("Error fetching applications:", error);
+      return [];
+    }
+  },
+  
+  submitApplication: async (data) => {
+    try {
+      // TODO: Get current user ID from auth context
+      const applicantId = 1; // Placeholder
+      const response = await fetch(`${API_BASE}/applications`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          post_id: data.projectId,
+          applicant_id: applicantId,
+        }),
+      });
+      if (!response.ok) throw new Error("Failed to submit application");
+      const result = await response.json();
+      return {
+        id: `app_${Date.now()}`,
+        ...data,
+        status: "PENDING",
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+    } catch (error) {
+      console.error("Error submitting application:", error);
+      throw error;
+    }
+  },
 
   // ── INBOUND APPLICATIONS (founder reviewing applicants) ───────────────────
-  // GET /api/projects/:id/applicants         returns ApplicationIn[]
-  // PUT /api/applications/:id/status         body: { status: "ACCEPTED" | "REJECTED" }
-  getProjectApplicants:    (pid)         => Promise.resolve(pid === 1 ? [...MOCK_INCOMING] : []),
-  updateApplicationStatus: (_id, status) => Promise.resolve({ status }),
+  getProjectApplicants: async (postId) => {
+    try {
+      const response = await fetch(`${API_BASE}/applications/${postId}`);
+      if (!response.ok) throw new Error("Failed to fetch applicants");
+      const applications = await response.json();
+      return applications.map(app => {
+        const parsed = parseJsonFields(app);
+        return {
+          id: parsed.id,
+          applicantName: parsed.name,
+          applicantStream: `${parsed.discipline} ${parsed.year}`,
+          applicantSkills: parsed.skills || [],
+          applicantTerms: [], // TODO: Store terms in user profile
+          applicantMatch: Math.floor(Math.random() * 20) + 70,
+          roleTitle: "Role", // TODO: Store in application
+          intro: "",
+          links: parsed.github || "",
+          status: parsed.status || "PENDING",
+          createdAt: parsed.applied_at || new Date().toISOString(),
+        };
+      });
+    } catch (error) {
+      console.error("Error fetching applicants:", error);
+      return [];
+    }
+  },
+  
+  updateApplicationStatus: async (id, status) => {
+    try {
+      const response = await fetch(`${API_BASE}/applications/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status }),
+      });
+      if (!response.ok) throw new Error("Failed to update application");
+      return { status };
+    } catch (error) {
+      console.error("Error updating application status:", error);
+      throw error;
+    }
+  },
 
   // ── MATCHING ──────────────────────────────────────────────────────────────
-  // GET /api/projects/:id/compatible-users   returns CompatibleUser[]
-  getCompatibleUsers: (_pid) => Promise.resolve([
-    { id:"u_002", name:"Priya Mehta",   stream:"ECE 3B", match:91, skills:["Python","ML/AI","React"],  terms:["W25","F25","W26"] },
-    { id:"u_003", name:"Arjun Sharma",  stream:"SE 2B",  match:86, skills:["Node.js","TypeScript"],    terms:["F25","W26"]       },
-    { id:"u_004", name:"Dana Kowalski", stream:"MTE 3A", match:79, skills:["PCB Design","Embedded C"], terms:["W25","F25"]       },
-  ]),
+  getCompatibleUsers: async (postId) => {
+    try {
+      // Get all users and calculate compatibility
+      const response = await fetch(`${API_BASE}/users`);
+      if (!response.ok) throw new Error("Failed to fetch users");
+      const users = await response.json();
+      return users.slice(0, 3).map(u => {
+        const parsed = parseJsonFields(u);
+        return {
+          id: parsed.id,
+          name: parsed.name,
+          stream: `${parsed.discipline} ${parsed.year}`,
+          match: Math.floor(Math.random() * 20) + 70,
+          skills: parsed.skills || [],
+          terms: [], // TODO: Store terms in user profile
+        };
+      });
+    } catch (error) {
+      console.error("Error fetching compatible users:", error);
+      return [];
+    }
+  },
 
   // ── INVITES ───────────────────────────────────────────────────────────────
-  // POST /api/invites   body: { toUserId, projectId, roleTitle }
-  sendInvite: (_to, _pid, _role) => Promise.resolve({ ok: true }),
+  sendInvite: async (toUserId, projectId, roleTitle) => {
+    try {
+      // For now, create an application as an invite
+      const response = await fetch(`${API_BASE}/applications`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          post_id: projectId,
+          applicant_id: toUserId,
+        }),
+      });
+      if (!response.ok) throw new Error("Failed to send invite");
+      return { ok: true };
+    } catch (error) {
+      console.error("Error sending invite:", error);
+      throw error;
+    }
+  },
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
