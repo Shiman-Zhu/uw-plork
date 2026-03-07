@@ -27,13 +27,17 @@ const api = {
   // For now, using simple user creation. In production, add proper auth endpoints
   login: async (email, password) => {
     try {
-      // TODO: Implement proper login endpoint
-      const response = await fetch(`${API_BASE}/users`);
-      if (!response.ok) throw new Error("Failed to fetch users");
-      const users = await response.json();
-      const user = users.find(u => u.email === email);
-      if (!user) throw new Error("User not found");
-      return { token: "mock-jwt", userId: user.id };
+      const response = await fetch(`${API_BASE}/auth/login`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password }),
+      });
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ error: "Login failed" }));
+        throw new Error(errorData.error || "Invalid email or password");
+      }
+      const data = await response.json();
+      return { token: "mock-jwt", userId: data.userId, user: data.user };
     } catch (error) {
       console.error("Error logging in:", error);
       throw error;
@@ -42,12 +46,16 @@ const api = {
 
   register: async (formData) => {
     try {
+      if (!formData.password) {
+        throw new Error("Password is required");
+      }
       const response = await fetch(`${API_BASE}/users`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           name: formData.name,
           email: formData.email,
+          password: formData.password,
           discipline: formData.discipline,
           year: formData.year,
           skills: formData.skills || [],
@@ -57,8 +65,8 @@ const api = {
         }),
       });
       if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`Registration failed: ${errorText || response.statusText}`);
+        const errorData = await response.json().catch(() => ({ error: "Registration failed" }));
+        throw new Error(errorData.error || "Registration failed");
       }
       await response.json();
       // Get the created user to return ID
@@ -126,9 +134,10 @@ const api = {
   },
 
   // ── PROJECTS / ACTIVITIES ─────────────────────────────────────────────────
-  getProjects: async (mode) => {
+  getProjects: async (mode, userId = null) => {
     try {
-      const response = await fetch(`${API_BASE}/posts`);
+      const url = userId ? `${API_BASE}/posts?userId=${userId}` : `${API_BASE}/posts`;
+      const response = await fetch(url);
       if (!response.ok) throw new Error("Failed to fetch posts");
       const posts = await response.json();
       // Transform posts to match frontend format
@@ -149,7 +158,7 @@ const api = {
           })) : [],
           spots: parsed.spots || 1,
           terms: { founder: [], overlap: [] }, // TODO: Store terms in DB
-          yours: false, // TODO: Check if current user is poster
+          yours: parsed.yours || false, // Set by backend based on userId
           poster_name: parsed.poster_name,
           discipline: parsed.discipline,
           year: parsed.year,
@@ -674,7 +683,13 @@ function Onboarding({ onComplete, onBack }) {
   const [form, setForm] = useState({ name: "", email: "", password: "", discipline: "", year: "", skills: [], interests: [], built: "", terms: [], commitment: "" });
   const u = (k, v) => setForm(f => ({ ...f, [k]: v }));
   const tog = (k, v) => setForm(f => ({ ...f, [k]: f[k].includes(v) ? f[k].filter(x => x !== v) : [...f[k], v] }));
-  const canNext = () => { if (step === 0) return form.name && form.email && form.password; if (step === 1) return form.discipline && form.year; if (step === 2) return form.skills.length > 0; if (step === 3) return form.terms.length > 0; return true; };
+  const canNext = () => {
+    if (step === 0) return form.name && form.email && form.password && form.password === form.confirmPassword && form.password.length >= 6;
+    if (step === 1) return form.discipline && form.year;
+    if (step === 2) return form.skills.length > 0;
+    if (step === 3) return form.terms.length > 0;
+    return true;
+  };
   const finish = async () => {
     setLoading(true);
     try {
@@ -696,7 +711,7 @@ function Onboarding({ onComplete, onBack }) {
       </nav>
       <div style={{ flex: 1, display: "flex", justifyContent: "center", padding: "52px 40px", overflowY: "auto" }}>
         <div className="fade-up" key={step} style={{ width: "100%", maxWidth: 580 }}>
-          {step === 0 && <><D size={44} style={{ display: "block", marginBottom: 6 }}>CREATE ACCOUNT</D><p style={{ fontSize: 13, color: C.muted, marginBottom: 40 }}>Sign up with your UW email.</p><FieldInput label="FULL NAME" value={form.name} onChange={v => u("name", v)} placeholder="Jamie Kim" /><FieldInput label="UW EMAIL" value={form.email} onChange={v => u("email", v)} placeholder="jkim@uwaterloo.ca" type="email" /><FieldInput label="PASSWORD" value={form.password} onChange={v => u("password", v)} placeholder="••••••••" type="password" /></>}
+          {step === 0 && <><D size={44} style={{ display: "block", marginBottom: 6 }}>CREATE ACCOUNT</D><p style={{ fontSize: 13, color: C.muted, marginBottom: 40 }}>Sign up with your UW email.</p><FieldInput label="FULL NAME" value={form.name} onChange={v => u("name", v)} placeholder="Jamie Kim" /><FieldInput label="UW EMAIL" value={form.email} onChange={v => u("email", v)} placeholder="jkim@uwaterloo.ca" type="email" /><FieldInput label="PASSWORD" value={form.password} onChange={v => u("password", v)} placeholder="••••••••" type="password" hint={form.password && form.password.length < 6 ? "At least 6 characters" : ""} /><FieldInput label="CONFIRM PASSWORD" value={form.confirmPassword || ""} onChange={v => u("confirmPassword", v)} placeholder="••••••••" type="password" hint={form.confirmPassword && form.password !== form.confirmPassword ? "Passwords don't match" : ""} /></>}
           {step === 1 && <><D size={44} style={{ display: "block", marginBottom: 6 }}>YOUR STREAM</D><p style={{ fontSize: 13, color: C.muted, marginBottom: 40 }}>Helps Plork understand your schedule.</p><div style={{ marginBottom: 28 }}><SectionLabel>DISCIPLINE</SectionLabel><div style={{ display: "flex", flexWrap: "wrap", gap: 7 }}>{DISCIPLINE_OPTIONS.map(d => <Chip key={d} active={form.discipline === d} onClick={() => u("discipline", d)}>{d}</Chip>)}</div></div><div><SectionLabel>CURRENT TERM</SectionLabel><div style={{ display: "flex", flexWrap: "wrap", gap: 7 }}>{YEAR_OPTIONS.map(y => <Chip key={y} active={form.year === y} onClick={() => u("year", y)}>{y}</Chip>)}</div></div></>}
           {step === 2 && <><D size={44} style={{ display: "block", marginBottom: 6 }}>YOUR SKILLS</D><p style={{ fontSize: 13, color: C.muted, marginBottom: 40 }}>Select everything you're comfortable with.</p><div style={{ marginBottom: 28 }}><SectionLabel>TECHNICAL SKILLS</SectionLabel><div style={{ display: "flex", flexWrap: "wrap", gap: 7 }}>{SKILL_OPTIONS.map(s => <Chip key={s} active={form.skills.includes(s)} onClick={() => tog("skills", s)}>{s}</Chip>)}</div></div><FieldTextarea label="WHAT I'VE BUILT" value={form.built} onChange={v => u("built", v)} placeholder="Built a lane-detection model for Midnight Sun." hint="1–2 lines" /><div><SectionLabel>INTERESTS — for Crew Mode</SectionLabel><div style={{ display: "flex", flexWrap: "wrap", gap: 7 }}>{INTEREST_OPTIONS.map(s => <Chip key={s} active={form.interests.includes(s)} onClick={() => tog("interests", s)}>{s}</Chip>)}</div></div></>}
           {step === 3 && <><D size={44} style={{ display: "block", marginBottom: 6 }}>YOUR SCHEDULE</D><p style={{ fontSize: 13, color: C.muted, marginBottom: 40 }}>Which terms are you on campus?</p><div style={{ marginBottom: 32 }}><SectionLabel>ON-CAMPUS TERMS</SectionLabel><div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>{ALL_TERMS.map(t => <div key={t} onClick={() => tog("terms", t)} style={{ padding: "14px 18px", border: form.terms.includes(t) ? `2px solid ${C.ink}` : `1px solid ${C.rule}`, background: form.terms.includes(t) ? C.ink : C.surface, cursor: "pointer", textAlign: "center", transition: "all 0.12s", minWidth: 60 }}><D size={15} color={form.terms.includes(t) ? C.lime : C.muted} style={{ display: "block" }}>{t}</D></div>)}</div></div><SectionLabel>COMMITMENT LEVEL</SectionLabel>{COMMITMENTS.map(c => <div key={c} onClick={() => u("commitment", c)} style={{ padding: "13px 18px", border: form.commitment === c ? `2px solid ${C.ink}` : `1px solid ${C.rule}`, background: form.commitment === c ? C.ink : C.surface, cursor: "pointer", marginBottom: 8, display: "flex", gap: 16, alignItems: "center", transition: "all 0.12s" }}><D size={15} color={form.commitment === c ? C.lime : C.muted} style={{ flexShrink: 0 }}>{c}</D><span style={{ fontSize: 12, color: form.commitment === c ? "#7a9a6a" : C.muted, lineHeight: 1.5 }}>{c === "CASUAL" ? "A few hours a week" : c === "SERIOUS" ? "Consistent effort, aiming to ship" : "Startup-track"}</span></div>)}</>}
@@ -1127,13 +1142,26 @@ function MainApp({ userId: propUserId }) {
   const [subPage, setSubPage] = useState(null);   // "profile" | "applications" | "manageApplicants"
   const [manageProject, setManageProject] = useState(null);
 
-  // Fetch profile when userId changes
+  // Fetch profile and projects when userId changes
   useEffect(() => {
     if (userId) {
       api.getProfile(userId).then(data => {
         setProfile(data);
       }).catch(err => {
         console.error("Failed to load profile:", err);
+      });
+
+      // Fetch projects with userId to show ownership
+      api.getProjects("BUILD", userId).then(data => {
+        setProjects(data);
+      }).catch(err => {
+        console.error("Failed to load projects:", err);
+      });
+
+      api.getProjects("CREW", userId).then(data => {
+        setActivities(data);
+      }).catch(err => {
+        console.error("Failed to load activities:", err);
       });
     }
   }, [userId]);
@@ -1146,7 +1174,31 @@ function MainApp({ userId: propUserId }) {
   const pendingCount = myApps.filter(a => a.status === "PENDING").length;
 
   const switchMode = m => { setMode(m); setSelectedId(m === "BUILD" ? 1 : 4); setTab(m === "BUILD" ? "ROLES" : "SPOTS"); setFilter("ALL"); };
-  const handlePost = item => { if (mode === "BUILD") { setProjects(p => [...p, item]); setSelectedId(item.id); setTab("ROLES"); } else { setActivities(a => [...a, item]); setSelectedId(item.id); setTab("SPOTS"); } };
+  const handlePost = async (item) => {
+    // Refresh projects from database after creating
+    if (userId) {
+      try {
+        const updated = await api.getProjects(mode === "BUILD" ? "BUILD" : "CREW", userId);
+        if (mode === "BUILD") {
+          setProjects(updated);
+          setSelectedId(updated[0]?.id || item.id);
+        } else {
+          setActivities(updated);
+          setSelectedId(updated[0]?.id || item.id);
+        }
+      } catch (err) {
+        console.error("Failed to refresh projects:", err);
+        // Fallback to old behavior
+        if (mode === "BUILD") { setProjects(p => [...p, item]); setSelectedId(item.id); }
+        else { setActivities(a => [...a, item]); setSelectedId(item.id); }
+      }
+    } else {
+      // Fallback if no userId
+      if (mode === "BUILD") { setProjects(p => [...p, item]); setSelectedId(item.id); }
+      else { setActivities(a => [...a, item]); setSelectedId(item.id); }
+    }
+    setTab(mode === "BUILD" ? "ROLES" : "SPOTS");
+  };
   const handleApplied = newApp => setMyApps(prev => [...prev, { id: `app_${Date.now()}`, ...newApp }]);
 
   if (subPage === "profile") return <ProfilePage profile={profile} userId={userId} onSave={p => { setProfile(p); setSubPage(null); }} onBack={() => setSubPage(null)} />;

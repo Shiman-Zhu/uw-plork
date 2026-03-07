@@ -1,6 +1,7 @@
 import express from "express";
 import db from "./db.js";
 import cors from "cors";
+import bcrypt from "bcrypt";
 
 const app = express();
 app.use(cors());
@@ -10,35 +11,94 @@ app.get("/", (req, res) => {
   res.json({ message: "uw-plork API is running!" });
 });
 
+// Login endpoint
+app.post("/auth/login", async (req, res) => {
+  try {
+    const { email, password } = req.body;
+
+    if (!email || !password) {
+      return res.status(400).json({ error: "Email and password are required" });
+    }
+
+    // Find user by email
+    const [users] = await db.execute("SELECT * FROM users WHERE email = ?", [
+      email,
+    ]);
+
+    if (users.length === 0) {
+      return res.status(401).json({ error: "Invalid email or password" });
+    }
+
+    const user = users[0];
+
+    // Verify password
+    const passwordMatch = await bcrypt.compare(password, user.password);
+
+    if (!passwordMatch) {
+      return res.status(401).json({ error: "Invalid email or password" });
+    }
+
+    // Remove password from response
+    const { password: _, ...userWithoutPassword } = user;
+
+    res.json({
+      message: "Login successful",
+      user: userWithoutPassword,
+      userId: user.id,
+    });
+  } catch (error) {
+    console.error("Error during login:", error);
+    res.status(500).json({ error: "Login failed" });
+  }
+});
+
 /** USERS!!!*/
 
 // Create user
 app.post("/users", async (req, res) => {
-  const {
-    name,
-    email,
-    discipline,
-    year,
-    skills,
-    interests,
-    commitment,
-    github,
-  } = req.body;
-  await db.execute(
-    `INSERT INTO users (name, email, discipline, year, skills, interests, commitment, github)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-    [
+  try {
+    const {
       name,
       email,
+      password,
       discipline,
       year,
-      JSON.stringify(skills),
-      JSON.stringify(interests),
+      skills,
+      interests,
       commitment,
       github,
-    ],
-  );
-  res.json({ message: "User created!" });
+    } = req.body;
+
+    if (!email || !password) {
+      return res.status(400).json({ error: "Email and password are required" });
+    }
+
+    // Hash password
+    const hashedPassword = await bcrypt.hash(password, 10);
+
+    await db.execute(
+      `INSERT INTO users (name, email, password, discipline, year, skills, interests, commitment, github)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        name,
+        email,
+        hashedPassword,
+        discipline,
+        year,
+        JSON.stringify(skills),
+        JSON.stringify(interests),
+        commitment,
+        github,
+      ],
+    );
+    res.json({ message: "User created!" });
+  } catch (error) {
+    if (error.code === "ER_DUP_ENTRY") {
+      return res.status(400).json({ error: "Email already exists" });
+    }
+    console.error("Error creating user:", error);
+    res.status(500).json({ error: "Failed to create user" });
+  }
 });
 
 // Get all users
@@ -60,19 +120,21 @@ app.get("/users/:id", async (req, res) => {
 
 // Update user
 app.put("/users/:id", async (req, res) => {
-  const {
-    name,
-    email,
-    discipline,
-    year,
-    skills,
-    interests,
-    commitment,
-    github,
-  } = req.body;
-  await db.execute(
-    `UPDATE users SET name = ?, email = ?, discipline = ?, year = ?, skills = ?, interests = ?, commitment = ?, github = ? WHERE id = ?`,
-    [
+  try {
+    const {
+      name,
+      email,
+      password,
+      discipline,
+      year,
+      skills,
+      interests,
+      commitment,
+      github,
+    } = req.body;
+
+    let updateQuery = `UPDATE users SET name = ?, email = ?, discipline = ?, year = ?, skills = ?, interests = ?, commitment = ?, github = ?`;
+    let params = [
       name,
       email,
       discipline,
@@ -82,12 +144,37 @@ app.put("/users/:id", async (req, res) => {
       commitment,
       github,
       req.params.id,
-    ],
-  );
-  const [users] = await db.execute("SELECT * FROM users WHERE id = ?", [
-    req.params.id,
-  ]);
-  res.json(users[0]);
+    ];
+
+    // If password is provided, hash it and update
+    if (password) {
+      const hashedPassword = await bcrypt.hash(password, 10);
+      updateQuery = `UPDATE users SET name = ?, email = ?, password = ?, discipline = ?, year = ?, skills = ?, interests = ?, commitment = ?, github = ?`;
+      params = [
+        name,
+        email,
+        hashedPassword,
+        discipline,
+        year,
+        JSON.stringify(skills),
+        JSON.stringify(interests),
+        commitment,
+        github,
+        req.params.id,
+      ];
+    }
+
+    updateQuery += ` WHERE id = ?`;
+    await db.execute(updateQuery, params);
+    const [users] = await db.execute(
+      "SELECT id, name, email, discipline, year, skills, interests, commitment, github, created_at FROM users WHERE id = ?",
+      [req.params.id],
+    );
+    res.json(users[0]);
+  } catch (error) {
+    console.error("Error updating user:", error);
+    res.status(500).json({ error: "Failed to update user" });
+  }
 });
 
 /** POST!!!!!!!!!!!!!!!!!!!!!!!! */
@@ -121,24 +208,48 @@ app.post("/posts", async (req, res) => {
 
 // Get all posts
 app.get("/posts", async (req, res) => {
-  const [posts] = await db.execute(`
-    SELECT p.*, u.name as poster_name, u.discipline, u.year
-    FROM posts p
-    JOIN users u ON p.poster_id = u.id
-    ORDER BY p.created_at DESC
-  `);
-  res.json(posts);
+  try {
+    const userId = req.query.userId; // Optional: current user ID to check ownership
+    const [posts] = await db.execute(`
+      SELECT p.*, u.name as poster_name, u.discipline, u.year
+      FROM posts p
+      JOIN users u ON p.poster_id = u.id
+      ORDER BY p.created_at DESC
+    `);
+
+    // Add 'yours' flag if userId is provided
+    const postsWithOwnership = posts.map((post) => ({
+      ...post,
+      yours: userId ? post.poster_id === parseInt(userId) : false,
+    }));
+
+    res.json(postsWithOwnership);
+  } catch (error) {
+    console.error("Error fetching posts:", error);
+    res.status(500).json({ error: "Failed to fetch posts" });
+  }
 });
 
 // Get Post
 app.get("/posts/:id", async (req, res) => {
-  const [posts] = await db.execute(
-    `SELECT p.*, u.name as poster_name, u.discipline, u.year
-    FROM posts p JOIN users u ON p.poster_id = u.id
-    WHERE p.id = ?`,
-    [req.params.id],
-  );
-  res.json(posts[0]);
+  try {
+    const userId = req.query.userId; // Optional: current user ID to check ownership
+    const [posts] = await db.execute(
+      `SELECT p.*, u.name as poster_name, u.discipline, u.year
+      FROM posts p JOIN users u ON p.poster_id = u.id
+      WHERE p.id = ?`,
+      [req.params.id],
+    );
+    if (posts.length === 0) {
+      return res.status(404).json({ error: "Post not found" });
+    }
+    const post = posts[0];
+    post.yours = userId ? post.poster_id === parseInt(userId) : false;
+    res.json(post);
+  } catch (error) {
+    console.error("Error fetching post:", error);
+    res.status(500).json({ error: "Failed to fetch post" });
+  }
 });
 
 // Application
