@@ -730,6 +730,104 @@ function ManageApplicantsPage({ postId, postName, mode, onBack, userId }) {
   );
 }
 
+function TopMatchesPage({ postId, postName, mode, onBack, userId }) {
+  const [matches, setMatches] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (postId) {
+      setLoading(true);
+      api.getTopMatchesForPost(postId, mode, 20).then(data => {
+        setMatches(data.matches || []);
+        setLoading(false);
+      }).catch(err => {
+        console.error("Failed to load top matches:", err);
+        setLoading(false);
+      });
+    }
+  }, [postId, mode]);
+
+  return (
+    <div style={{ minHeight: "100vh", background: C.bg, color: C.ink, display: "flex", flexDirection: "column", fontFamily: "'IBM Plex Mono',monospace" }}>
+      <style>{BASE_CSS}</style>
+      <div style={{ display: "flex", alignItems: "stretch", borderBottom: `1px solid ${C.rule}`, height: 52, flexShrink: 0, background: C.bg }}>
+        <div style={{ padding: "0 24px", display: "flex", alignItems: "center", borderRight: `1px solid ${C.rule}`, gap: 10 }}>
+          <D size={24}>PLORK</D>
+        </div>
+        <div style={{ flex: 1, display: "flex", alignItems: "center", padding: "0 24px", justifyContent: "space-between" }}>
+          <D size={18}>TOP MATCHES</D>
+          <button onClick={onBack} style={{ padding: "6px 16px", fontSize: 11, letterSpacing: "0.08em", fontWeight: 600, background: "transparent", color: C.ink, border: `1px solid ${C.ink}`, cursor: "pointer" }}>← BACK</button>
+        </div>
+      </div>
+      <div style={{ flex: 1, overflowY: "auto", padding: "40px 48px" }}>
+        <D size={32} style={{ display: "block", marginBottom: 8 }}>{postName}</D>
+        <M style={{ fontSize: 12, color: C.muted, marginBottom: 32, display: "block" }}>Top users who match this {mode === "WORK" ? "project" : "activity"} based on {mode === "WORK" ? "skills" : "interests"}</M>
+
+        {loading ? (
+          <div style={{ padding: "40px 20px", textAlign: "center" }}>
+            <M style={{ fontSize: 12, color: C.muted }}>Loading top matches...</M>
+          </div>
+        ) : matches.length === 0 ? (
+          <div style={{ padding: "40px 20px", textAlign: "center", border: `1px solid ${C.rule}`, background: C.surface }}>
+            <M style={{ fontSize: 12, color: C.muted, lineHeight: 1.6 }}>No matching users found.</M>
+          </div>
+        ) : (
+          <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+            {matches.map((user, idx) => {
+              const skills = Array.isArray(user.skills) ? user.skills : [];
+              const interests = Array.isArray(user.interests) ? user.interests : [];
+              const compatibilityScore = user.compatibility_score || 0;
+
+              return (
+                <div key={user.id || idx} style={{ border: `1px solid ${C.rule}`, background: C.surface, padding: "24px" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 16 }}>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 8 }}>
+                        <D size={20}>{user.name || "Unknown"}</D>
+                        <M style={{ fontSize: 11, color: C.muted, background: C.rule, padding: "2px 8px" }}>{user.discipline || "N/A"}</M>
+                        <M style={{ fontSize: 11, color: C.muted, background: C.rule, padding: "2px 8px" }}>{user.year || "N/A"}</M>
+                      </div>
+                      {user.github && (
+                        <M style={{ fontSize: 11, color: C.lime, marginBottom: 12, display: "block" }}>GitHub: {user.github}</M>
+                      )}
+                    </div>
+                    <div style={{ textAlign: "right" }}>
+                      <M style={{ fontSize: 10, color: C.muted, letterSpacing: "0.1em", display: "block", marginBottom: 4 }}>MATCH</M>
+                      <D size={24} color={compatibilityScore > 90 ? C.lime : compatibilityScore > 75 ? "#aaaa00" : C.muted}>{compatibilityScore}%</D>
+                    </div>
+                  </div>
+
+                  {mode === "WORK" && skills.length > 0 && (
+                    <div style={{ marginBottom: 12 }}>
+                      <M style={{ fontSize: 10, color: C.muted, letterSpacing: "0.1em", display: "block", marginBottom: 8 }}>SKILLS</M>
+                      <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                        {skills.slice(0, 10).map(skill => (
+                          <M key={skill} style={{ fontSize: 10, background: C.limeLight, color: C.limeDark, border: `1px solid ${C.lime}66`, padding: "3px 9px" }}>{skill}</M>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {mode === "PLAY" && interests.length > 0 && (
+                    <div style={{ marginBottom: 12 }}>
+                      <M style={{ fontSize: 10, color: C.muted, letterSpacing: "0.1em", display: "block", marginBottom: 8 }}>INTERESTS</M>
+                      <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                        {interests.slice(0, 10).map(interest => (
+                          <M key={interest} style={{ fontSize: 10, background: C.limeLight, color: C.limeDark, border: `1px solid ${C.lime}66`, padding: "3px 9px" }}>{interest}</M>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function MainApp({ userId: propUserId, initialProfile }) {
   const [mode, setMode] = useState("WORK");
   const [projects, setProjects] = useState([]);

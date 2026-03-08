@@ -454,7 +454,7 @@ app.post("/applications", async (req, res) => {
 app.get("/applications/:post_id", async (req, res) => {
   try {
     const mode = req.query.mode || "WORK"; // WORK or PLAY mode
-
+    
     // Get the post to determine required skills
     const [posts] = await db.execute("SELECT * FROM posts WHERE id = ?", [
       req.params.post_id,
@@ -481,21 +481,19 @@ app.get("/applications/:post_id", async (req, res) => {
       const applicantData = parseJsonFields(application);
       const applicantSkills = parseJSON(applicantData.skills || []);
       const applicantInterests = parseJSON(applicantData.interests || []);
-
+      
       const compatibilityScore = calculateCompatibilityScore(
         applicantSkills,
         applicantInterests,
         postSkills,
-        mode,
+        mode
       );
-
+      
       return { ...applicantData, compatibility_score: compatibilityScore };
     });
 
     // Sort by compatibility score (descending)
-    applicantsWithScores.sort(
-      (a, b) => b.compatibility_score - a.compatibility_score,
-    );
+    applicantsWithScores.sort((a, b) => b.compatibility_score - a.compatibility_score);
 
     res.json(applicantsWithScores);
   } catch (error) {
@@ -507,7 +505,7 @@ app.get("/applications/:post_id", async (req, res) => {
 app.get("/applications/:post_id/ranked", async (req, res) => {
   try {
     const mode = req.query.mode || "WORK"; // WORK or PLAY mode
-
+    
     const [posts] = await db.execute("SELECT * FROM posts WHERE id = ?", [
       req.params.post_id,
     ]);
@@ -537,13 +535,9 @@ app.get("/applications/:post_id/ranked", async (req, res) => {
           applicantSkills,
           applicantInterests,
           postSkills,
-          mode,
+          mode
         );
-        return {
-          ...applicantData,
-          fit_score: compatibilityScore,
-          compatibility_score: compatibilityScore,
-        };
+        return { ...applicantData, fit_score: compatibilityScore, compatibility_score: compatibilityScore };
       })
       .sort((a, b) => b.fit_score - a.fit_score);
 
@@ -572,7 +566,7 @@ app.get("/posts/:post_id/top-matches", async (req, res) => {
   try {
     const mode = req.query.mode || "WORK"; // WORK or PLAY mode
     const limit = parseInt(req.query.limit) || 20; // Number of top matches to return
-
+    
     // Get the post
     const [posts] = await db.execute("SELECT * FROM posts WHERE id = ?", [
       req.params.post_id,
@@ -588,18 +582,18 @@ app.get("/posts/:post_id/top-matches", async (req, res) => {
     // Get existing applicants to exclude them
     const [existingApplications] = await db.execute(
       "SELECT applicant_id FROM applications WHERE post_id = ?",
-      [req.params.post_id],
+      [req.params.post_id]
     );
-    const applicantIds = existingApplications.map((app) => app.applicant_id);
-
+    const applicantIds = existingApplications.map(app => app.applicant_id);
+    
     // Build query to exclude poster and existing applicants
     let excludeIds = [posterId, ...applicantIds];
     const placeholders = excludeIds.map(() => "?").join(",");
-
+    
     // Get all users except the poster and existing applicants
     const [users] = await db.execute(
       `SELECT * FROM users WHERE id NOT IN (${placeholders})`,
-      excludeIds,
+      excludeIds
     );
 
     // Calculate compatibility score for each user
@@ -607,21 +601,19 @@ app.get("/posts/:post_id/top-matches", async (req, res) => {
       const userData = parseJsonFields(user);
       const userSkills = parseJSON(userData.skills || []);
       const userInterests = parseJSON(userData.interests || []);
-
+      
       const compatibilityScore = calculateCompatibilityScore(
         userSkills,
         userInterests,
         postSkills,
-        mode,
+        mode
       );
-
+      
       return { ...userData, compatibility_score: compatibilityScore };
     });
 
     // Sort by compatibility score (descending) and take top N
-    usersWithScores.sort(
-      (a, b) => b.compatibility_score - a.compatibility_score,
-    );
+    usersWithScores.sort((a, b) => b.compatibility_score - a.compatibility_score);
     const topMatches = usersWithScores.slice(0, limit);
 
     res.json({ post: post.title, matches: topMatches });
