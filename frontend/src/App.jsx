@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { api } from "./api";
 
 const ALL_TERMS = ["W26", "S26", "F26", "W27", "S27", "F27", "W28"];
@@ -713,6 +713,44 @@ function MainApp({ userId: propUserId, initialProfile }) {
       alert("Failed to submit application: " + (err.message || "Unknown error"));
     }
   };
+
+  // Refetch posts when profile skills/interests change (to update compatibility scores)
+  // Use a ref to track previous values to avoid infinite loops
+  const prevSkillsRef = useRef(JSON.stringify(profile?.skills || []));
+  const prevInterestsRef = useRef(JSON.stringify(profile?.interests || []));
+  
+  useEffect(() => {
+    if (userId && profile) {
+      const currentSkills = JSON.stringify(profile.skills || []);
+      const currentInterests = JSON.stringify(profile.interests || []);
+      
+      // Only refetch if skills or interests actually changed
+      if (currentSkills !== prevSkillsRef.current || currentInterests !== prevInterestsRef.current) {
+        prevSkillsRef.current = currentSkills;
+        prevInterestsRef.current = currentInterests;
+        
+        setLoading(true);
+        api.getProjects(mode, userId).then(data => {
+          if (mode === "BUILD") {
+            setProjects(data);
+            // Keep current selection if it still exists
+            if (selectedId && !data.find(p => p.id === selectedId)) {
+              setSelectedId(data[0]?.id || null);
+            }
+          } else {
+            setActivities(data);
+            if (selectedId && !data.find(a => a.id === selectedId)) {
+              setSelectedId(data[0]?.id || null);
+            }
+          }
+          setLoading(false);
+        }).catch(err => {
+          console.error("Failed to reload projects after profile update:", err);
+          setLoading(false);
+        });
+      }
+    }
+  }, [profile?.skills, profile?.interests, userId, mode, selectedId]);
 
   if (showProfile) return <ProfilePage profile={profile} onSave={p => { setProfile(p); }} onBack={() => setShowProfile(false)} userId={userId} />;
 

@@ -125,11 +125,18 @@ export const api = {
           year: data.year,
           skills: data.skills || [],
           interests: data.interests || [],
+          terms: data.terms || [],
+          built: data.built || "",
           commitment: data.commitment,
           github: data.github || "",
         }),
       });
-      if (!response.ok) throw new Error("Update failed");
+      if (!response.ok) {
+        const errorData = await response
+          .json()
+          .catch(() => ({ error: "Update failed" }));
+        throw new Error(errorData.error || "Update failed");
+      }
       const updated = await response.json();
       return parseJsonFields(updated);
     } catch (error) {

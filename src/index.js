@@ -210,47 +210,59 @@ app.put("/users/:id", async (req, res) => {
       year,
       skills,
       interests,
+      terms,
+      built,
       commitment,
       github,
     } = req.body;
 
-    let updateQuery = `UPDATE users SET name = ?, email = ?, discipline = ?, year = ?, skills = ?, interests = ?, commitment = ?, github = ?`;
+    // Note: 'built' field is not in the database schema, so we skip it
+    // If you want to store 'built', add it to the database schema first
+    let updateQuery = `UPDATE users SET name = ?, email = ?, discipline = ?, year = ?, skills = ?, interests = ?, terms = ?, commitment = ?, github = ?`;
     let params = [
       name,
       email,
       discipline,
       year,
-      JSON.stringify(skills),
-      JSON.stringify(interests),
+      JSON.stringify(skills || []),
+      JSON.stringify(interests || []),
+      JSON.stringify(terms || []),
       commitment,
-      github,
+      github || "",
       req.params.id,
     ];
 
     // If password is provided, hash it and update
     if (password) {
       const hashedPassword = await bcrypt.hash(password, 10);
-      updateQuery = `UPDATE users SET name = ?, email = ?, password = ?, discipline = ?, year = ?, skills = ?, interests = ?, commitment = ?, github = ?`;
+      updateQuery = `UPDATE users SET name = ?, email = ?, password = ?, discipline = ?, year = ?, skills = ?, interests = ?, terms = ?, commitment = ?, github = ?`;
       params = [
         name,
         email,
         hashedPassword,
         discipline,
         year,
-        JSON.stringify(skills),
-        JSON.stringify(interests),
+        JSON.stringify(skills || []),
+        JSON.stringify(interests || []),
+        JSON.stringify(terms || []),
         commitment,
-        github,
+        github || "",
         req.params.id,
       ];
     }
 
     updateQuery += ` WHERE id = ?`;
     await db.execute(updateQuery, params);
-    const [users] = await db.execute(
-      "SELECT id, name, email, discipline, year, skills, interests, commitment, github, created_at FROM users WHERE id = ?",
-      [req.params.id],
-    );
+
+    // Fetch updated user with all fields
+    const [users] = await db.execute("SELECT * FROM users WHERE id = ?", [
+      req.params.id,
+    ]);
+
+    if (users.length === 0) {
+      return res.status(404).json({ error: "User not found" });
+    }
+
     res.json(parseJsonFields(users[0]));
   } catch (error) {
     console.error("Error updating user:", error);
