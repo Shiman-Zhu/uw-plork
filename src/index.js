@@ -6,17 +6,55 @@ const app = express()
 app.use(cors())
 app.use(express.json())
 
-// jaccard function
+function parseJSON(val) {
+  if (!val) return []
+  if (Array.isArray(val)) return val  // ← already an array, just return it
+  try {
+    return JSON.parse(val)
+  } catch {
+    return val.split(',').map(s => s.trim()).filter(Boolean)
+  }
+}
+
+// ── Jaccard (keep this for /feed) ──────────────────────────────
 function jaccardScore(userSkills, postSkills) {
   const a = new Set(userSkills)
   const b = new Set(postSkills)
   if (a.size === 0 && b.size === 0) return 0
-
   const intersection = [...a].filter(x => b.has(x)).length
   const union = new Set([...a, ...b]).size
-
   return Math.round((intersection / union) * 100)
 }
+
+function rankApplicantsForPost(post, applicants) {
+  const postSkills = parseJSON(post.skills_needed)  // ← change this
+  const scored = applicants.map(applicant => {
+    const applicantSkills = parseJSON(applicant.skills)  // ← and this
+    const score = jaccardScore(applicantSkills, postSkills)
+    return { ...applicant, fit_score: score }
+  })
+  return scored.sort((a, b) => b.fit_score - a.fit_score)
+}
+
+// ── New route: GET /applications/:post_id/ranked ───────────────
+// Returns applicants for a post, ranked by skill fit
+app.get('/applications/:post_id/ranked', async (req, res) => {
+  const [posts] = await db.execute(
+    'SELECT * FROM posts WHERE id = ?',
+    [req.params.post_id]
+  )
+  if (!posts.length) return res.status(404).json({ error: 'Post not found' })
+
+  const [applications] = await db.execute(`
+    SELECT r.*, u.name, u.discipline, u.year, u.skills, u.github
+    FROM applications r
+    JOIN users u ON r.applicant_id = u.id
+    WHERE r.post_id = ?
+  `, [req.params.post_id])
+
+  const ranked = rankApplicantsForPost(posts[0], applications)
+  res.json({ post: posts[0].title, applicants: ranked })
+})
 
 
 app.get('/', (req, res) => {
@@ -102,8 +140,8 @@ app.get('/feed/:user_id', async (req, res) => {
   if (!users.length) return res.status(404).json({ error: 'User not found' })
 
   const user = users[0]
-  const userSkills    = JSON.parse(user.skills    || '[]')
-  const userInterests = JSON.parse(user.interests || '[]')
+  const userSkills    = parseJSON(user.skills)
+  const userInterests = parseJSON(user.interests)
 
   // Fetch all posts (excluding the user's own)
   const [posts] = await db.execute(`
@@ -116,7 +154,7 @@ app.get('/feed/:user_id', async (req, res) => {
 
   // Score each post
   const scored = posts.map(post => {
-    const postSkills = JSON.parse(post.skills_needed || '[]')
+    const postSkills = parseJSON(post.skills_needed)
 
     const skillScore    = jaccardScore(userSkills, postSkills)
     const interestScore = jaccardScore(userInterests, postSkills) // interests vs skills needed
