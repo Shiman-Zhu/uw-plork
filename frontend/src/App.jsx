@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { api } from "./api";
 
-const ALL_TERMS = ["W26", "S26", "F26", "W27", "S27", "F27", "W28"];
+const ALL_TERMS = ["W26", "S26", "F26", "W26", "S27", "F27", "W27"];
 const SKILL_OPTIONS = ["React", "TypeScript", "Python", "ML/AI", "Embedded C", "PCB Design", "CAD", "Rust", "Node.js", "FPGA", "Computer Vision", "iOS", "Java", "C++", "Figma", "Verilog", "Swift", "Docker"];
 const DISCIPLINE_OPTIONS = ["ECE", "MTE", "SE", "CE", "ME", "CHE", "CIVE", "ENVE", "NANO", "SYDE", "TRON", "BME"];
 const YEAR_OPTIONS = ["1A", "1B", "2A", "2B", "3A", "3B", "4A", "4B"];
@@ -401,21 +401,41 @@ function PostModal({ mode, onClose, onSubmit, userId }) {
 }
 
 function ProfilePage({ profile, onSave, onBack, userId }) {
-  const [form, setForm] = useState({ ...profile });
+  // Ensure all array fields are initialized as arrays
+  const safeProfile = {
+    name: profile?.name || "",
+    email: profile?.email || "",
+    discipline: profile?.discipline || "",
+    year: profile?.year || "",
+    skills: Array.isArray(profile?.skills) ? profile.skills : [],
+    interests: Array.isArray(profile?.interests) ? profile.interests : [],
+    built: profile?.built || "",
+    terms: Array.isArray(profile?.terms) ? profile.terms : [],
+    commitment: profile?.commitment || "",
+    github: profile?.github || "",
+  };
+  const [form, setForm] = useState(safeProfile);
   const [saved, setSaved] = useState(false);
   const [loading, setLoading] = useState(false);
   const [customSkill, setCustomSkill] = useState("");
   const [customInterest, setCustomInterest] = useState("");
   const u = (k, v) => setForm(f => ({ ...f, [k]: v }));
-  const tog = (k, v) => setForm(f => ({ ...f, [k]: f[k].includes(v) ? f[k].filter(x => x !== v) : [...f[k], v] }));
+  const tog = (k, v) => {
+    setForm(f => {
+      const current = Array.isArray(f[k]) ? f[k] : [];
+      return { ...f, [k]: current.includes(v) ? current.filter(x => x !== v) : [...current, v] };
+    });
+  };
   const addCustomSkill = () => {
-    if (customSkill.trim() && !form.skills.includes(customSkill.trim())) {
+    const skills = Array.isArray(form.skills) ? form.skills : [];
+    if (customSkill.trim() && !skills.includes(customSkill.trim())) {
       tog("skills", customSkill.trim());
       setCustomSkill("");
     }
   };
   const addCustomInterest = () => {
-    if (customInterest.trim() && !form.interests.includes(customInterest.trim())) {
+    const interests = Array.isArray(form.interests) ? form.interests : [];
+    if (customInterest.trim() && !interests.includes(customInterest.trim())) {
       tog("interests", customInterest.trim());
       setCustomInterest("");
     }
@@ -473,23 +493,26 @@ function ProfilePage({ profile, onSave, onBack, userId }) {
           {/* Skills summary */}
           <SectionLabel>SKILLS</SectionLabel>
           <div style={{ display: "flex", flexWrap: "wrap", gap: 5, marginBottom: 24 }}>
-            {form.skills.length > 0
+            {Array.isArray(form.skills) && form.skills.length > 0
               ? form.skills.map(s => <M key={s} style={{ fontSize: 10, background: C.limeLight, color: C.limeDark, border: `1px solid ${C.lime}66`, padding: "2px 8px" }}>{s}</M>)
               : <M style={{ fontSize: 11, color: C.muted }}>None added yet</M>}
           </div>
 
           <SectionLabel>INTERESTS</SectionLabel>
           <div style={{ display: "flex", flexWrap: "wrap", gap: 5, marginBottom: 24 }}>
-            {form.interests.length > 0
+            {Array.isArray(form.interests) && form.interests.length > 0
               ? form.interests.map(s => <M key={s} style={{ fontSize: 10, background: C.surface2, color: C.body, border: `1px solid ${C.rule}`, padding: "2px 8px" }}>{s}</M>)
               : <M style={{ fontSize: 11, color: C.muted }}>None added yet</M>}
           </div>
 
           <SectionLabel>ON-CAMPUS TERMS</SectionLabel>
           <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
-            {ALL_TERMS.map(t => (
-              <M key={t} style={{ fontSize: 10, padding: "2px 7px", background: form.terms.includes(t) ? C.ink : C.surface2, color: form.terms.includes(t) ? C.lime : C.muted, border: `1px solid ${form.terms.includes(t) ? C.ink : C.rule}` }}>{t}</M>
-            ))}
+            {ALL_TERMS.map(t => {
+              const terms = Array.isArray(form.terms) ? form.terms : [];
+              return (
+                <M key={t} style={{ fontSize: 10, padding: "2px 7px", background: terms.includes(t) ? C.ink : C.surface2, color: terms.includes(t) ? C.lime : C.muted, border: `1px solid ${terms.includes(t) ? C.ink : C.rule}` }}>{t}</M>
+              );
+            })}
           </div>
         </div>
 
@@ -532,13 +555,16 @@ function ProfilePage({ profile, onSave, onBack, userId }) {
           <SectionLabel>TECHNICAL SKILLS</SectionLabel>
           <div style={{ marginBottom: 20 }}>
             <div style={{ display: "flex", flexWrap: "wrap", gap: 7, marginBottom: 12 }}>
-              {SKILL_OPTIONS.map(s => <Chip key={s} active={form.skills.includes(s)} onClick={() => tog("skills", s)}>{s}</Chip>)}
+              {SKILL_OPTIONS.map(s => {
+                const skills = Array.isArray(form.skills) ? form.skills : [];
+                return <Chip key={s} active={skills.includes(s)} onClick={() => tog("skills", s)}>{s}</Chip>;
+              })}
             </div>
             <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
               <input value={customSkill} onChange={e => setCustomSkill(e.target.value)} onKeyPress={e => e.key === "Enter" && addCustomSkill()} placeholder="Add custom skill..." style={{ flex: 1, padding: "8px 12px", fontSize: 12, color: C.ink, background: C.surface, border: `1px solid ${C.rule}`, outline: "none" }} onFocus={e => e.target.style.borderColor = C.lime} onBlur={e => e.target.style.borderColor = C.rule} />
               <button onClick={addCustomSkill} style={{ padding: "8px 16px", fontSize: 11, background: C.ink, color: C.bg, border: "none", cursor: "pointer" }}>ADD</button>
             </div>
-            {form.skills.filter(s => !SKILL_OPTIONS.includes(s)).length > 0 && <div style={{ display: "flex", flexWrap: "wrap", gap: 7, marginTop: 12 }}>{form.skills.filter(s => !SKILL_OPTIONS.includes(s)).map(s => <Chip key={s} active={true} onClick={() => tog("skills", s)}>{s}</Chip>)}</div>}
+            {Array.isArray(form.skills) && form.skills.filter(s => !SKILL_OPTIONS.includes(s)).length > 0 && <div style={{ display: "flex", flexWrap: "wrap", gap: 7, marginTop: 12 }}>{form.skills.filter(s => !SKILL_OPTIONS.includes(s)).map(s => <Chip key={s} active={true} onClick={() => tog("skills", s)}>{s}</Chip>)}</div>}
           </div>
 
           <FieldTextarea
@@ -556,13 +582,16 @@ function ProfilePage({ profile, onSave, onBack, userId }) {
           <SectionLabel>INTERESTS — shown in Crew Mode</SectionLabel>
           <div style={{ marginBottom: 20 }}>
             <div style={{ display: "flex", flexWrap: "wrap", gap: 7, marginBottom: 12 }}>
-              {INTEREST_OPTIONS.map(s => <Chip key={s} active={form.interests.includes(s)} onClick={() => tog("interests", s)}>{s}</Chip>)}
+              {INTEREST_OPTIONS.map(s => {
+                const interests = Array.isArray(form.interests) ? form.interests : [];
+                return <Chip key={s} active={interests.includes(s)} onClick={() => tog("interests", s)}>{s}</Chip>;
+              })}
             </div>
             <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
               <input value={customInterest} onChange={e => setCustomInterest(e.target.value)} onKeyPress={e => e.key === "Enter" && addCustomInterest()} placeholder="Add custom interest..." style={{ flex: 1, padding: "8px 12px", fontSize: 12, color: C.ink, background: C.surface, border: `1px solid ${C.rule}`, outline: "none" }} onFocus={e => e.target.style.borderColor = C.lime} onBlur={e => e.target.style.borderColor = C.rule} />
               <button onClick={addCustomInterest} style={{ padding: "8px 16px", fontSize: 11, background: C.ink, color: C.bg, border: "none", cursor: "pointer" }}>ADD</button>
             </div>
-            {form.interests.filter(s => !INTEREST_OPTIONS.includes(s)).length > 0 && <div style={{ display: "flex", flexWrap: "wrap", gap: 7, marginTop: 12 }}>{form.interests.filter(s => !INTEREST_OPTIONS.includes(s)).map(s => <Chip key={s} active={true} onClick={() => tog("interests", s)}>{s}</Chip>)}</div>}
+            {Array.isArray(form.interests) && form.interests.filter(s => !INTEREST_OPTIONS.includes(s)).length > 0 && <div style={{ display: "flex", flexWrap: "wrap", gap: 7, marginTop: 12 }}>{form.interests.filter(s => !INTEREST_OPTIONS.includes(s)).map(s => <Chip key={s} active={true} onClick={() => tog("interests", s)}>{s}</Chip>)}</div>}
           </div>
 
           <SectionDivider />
@@ -572,11 +601,14 @@ function ProfilePage({ profile, onSave, onBack, userId }) {
           <div style={{ marginBottom: 20 }}>
             <label style={{ fontSize: 10, color: C.muted, letterSpacing: "0.12em", display: "block", marginBottom: 12 }}>ON-CAMPUS TERMS</label>
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-              {ALL_TERMS.map(t => (
-                <div key={t} onClick={() => tog("terms", t)} style={{ padding: "14px 18px", border: form.terms.includes(t) ? `2px solid ${C.ink}` : `1px solid ${C.rule}`, background: form.terms.includes(t) ? C.ink : C.surface, cursor: "pointer", textAlign: "center", transition: "all 0.12s", minWidth: 60 }}>
-                  <D size={15} color={form.terms.includes(t) ? C.lime : C.muted} style={{ display: "block" }}>{t}</D>
-                </div>
-              ))}
+              {ALL_TERMS.map(t => {
+                const terms = Array.isArray(form.terms) ? form.terms : [];
+                return (
+                  <div key={t} onClick={() => tog("terms", t)} style={{ padding: "14px 18px", border: terms.includes(t) ? `2px solid ${C.ink}` : `1px solid ${C.rule}`, background: terms.includes(t) ? C.ink : C.surface, cursor: "pointer", textAlign: "center", transition: "all 0.12s", minWidth: 60 }}>
+                    <D size={15} color={terms.includes(t) ? C.lime : C.muted} style={{ display: "block" }}>{t}</D>
+                  </div>
+                );
+              })}
             </div>
           </div>
 
