@@ -42,6 +42,41 @@ const parseJsonFields = (obj) => {
   return parsed;
 };
 
+// Helper function to parse JSON (handles arrays, strings, and comma-separated strings)
+const parseJSON = (val) => {
+  if (!val) return [];
+  if (Array.isArray(val)) return val; // Already an array, just return it
+  try {
+    return JSON.parse(val);
+  } catch {
+    // If JSON.parse fails, try splitting by comma
+    return val
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean);
+  }
+};
+
+// ── Jaccard Similarity Score ────────────────────────────────────────────────
+// Calculates similarity between two skill sets using Jaccard coefficient
+function jaccardScore(userSkills, postSkills) {
+  const a = new Set(userSkills);
+  const b = new Set(postSkills);
+  if (a.size === 0 && b.size === 0) return 0;
+  const intersection = [...a].filter((x) => b.has(x)).length;
+  const union = new Set([...a, ...b]).size;
+  return Math.round((intersection / union) * 100);
+}
+
+// ── Calculate Compatibility Score ──────────────────────────────────────────
+// Combines skill match (70%) and interest match (30%)
+function calculateCompatibilityScore(userSkills, userInterests, postSkills) {
+  const skillScore = jaccardScore(userSkills, postSkills);
+  const interestScore = jaccardScore(userInterests, postSkills);
+  const finalScore = Math.round(skillScore * 0.7 + interestScore * 0.3);
+  return finalScore;
+}
+
 app.get("/", (req, res) => {
   res.json({ message: "uw-plork API is running!" });
 });
@@ -284,7 +319,26 @@ app.post("/posts", async (req, res) => {
 // Get all posts
 app.get("/posts", async (req, res) => {
   try {
-    const userId = req.query.userId; // Optional: current user ID to check ownership
+    const userId = req.query.userId; // Optional: current user ID to check ownership and calculate compatibility
+
+    // If userId is provided, fetch user data for compatibility calculation
+    let userSkills = [];
+    let userInterests = [];
+    if (userId) {
+      try {
+        const [users] = await db.execute("SELECT * FROM users WHERE id = ?", [
+          userId,
+        ]);
+        if (users.length > 0) {
+          const user = parseJsonFields(users[0]);
+          userSkills = parseJSON(user.skills || []);
+          userInterests = parseJSON(user.interests || []);
+        }
+      } catch (err) {
+        console.error("Error fetching user for compatibility:", err);
+      }
+    }
+
     const [posts] = await db.execute(`
       SELECT p.*, u.name as poster_name, u.discipline, u.year
       FROM posts p
@@ -292,12 +346,26 @@ app.get("/posts", async (req, res) => {
       ORDER BY p.created_at DESC
     `);
 
-    // Add 'yours' flag if userId is provided and parse JSON fields
+    // Add 'yours' flag and compatibility score if userId is provided
     const postsWithOwnership = posts.map((post) => {
       const parsed = parseJsonFields(post);
+      const isYours = userId ? post.poster_id === parseInt(userId) : false;
+
+      // Calculate compatibility score if userId is provided and it's not the user's own post
+      let compatibilityScore = null;
+      if (userId && !isYours && userSkills.length > 0) {
+        const postSkills = parseJSON(parsed.skills_needed || []);
+        compatibilityScore = calculateCompatibilityScore(
+          userSkills,
+          userInterests,
+          postSkills,
+        );
+      }
+
       return {
         ...parsed,
-        yours: userId ? post.poster_id === parseInt(userId) : false,
+        yours: isYours,
+        compatibility_score: compatibilityScore,
       };
     });
 
@@ -311,7 +379,26 @@ app.get("/posts", async (req, res) => {
 // Get Post
 app.get("/posts/:id", async (req, res) => {
   try {
-    const userId = req.query.userId; // Optional: current user ID to check ownership
+    const userId = req.query.userId; // Optional: current user ID to check ownership and calculate compatibility
+
+    // If userId is provided, fetch user data for compatibility calculation
+    let userSkills = [];
+    let userInterests = [];
+    if (userId) {
+      try {
+        const [users] = await db.execute("SELECT * FROM users WHERE id = ?", [
+          userId,
+        ]);
+        if (users.length > 0) {
+          const user = parseJsonFields(users[0]);
+          userSkills = parseJSON(user.skills || []);
+          userInterests = parseJSON(user.interests || []);
+        }
+      } catch (err) {
+        console.error("Error fetching user for compatibility:", err);
+      }
+    }
+
     const [posts] = await db.execute(
       `SELECT p.*, u.name as poster_name, u.discipline, u.year
       FROM posts p JOIN users u ON p.poster_id = u.id
@@ -322,7 +409,21 @@ app.get("/posts/:id", async (req, res) => {
       return res.status(404).json({ error: "Post not found" });
     }
     const post = parseJsonFields(posts[0]);
-    post.yours = userId ? posts[0].poster_id === parseInt(userId) : false;
+    const isYours = userId ? posts[0].poster_id === parseInt(userId) : false;
+
+    // Calculate compatibility score if userId is provided and it's not the user's own post
+    let compatibilityScore = null;
+    if (userId && !isYours && userSkills.length > 0) {
+      const postSkills = parseJSON(post.skills_needed || []);
+      compatibilityScore = calculateCompatibilityScore(
+        userSkills,
+        userInterests,
+        postSkills,
+      );
+    }
+
+    post.yours = isYours;
+    post.compatibility_score = compatibilityScore;
     res.json(post);
   } catch (error) {
     console.error("Error fetching post:", error);
@@ -342,16 +443,61 @@ app.post("/applications", async (req, res) => {
 
 // Get all applications for a post
 app.get("/applications/:post_id", async (req, res) => {
-  const [applications] = await db.execute(
-    `
-    SELECT r.*, u.name, u.discipline, u.year, u.skills, u.github
-    FROM applications r
-    JOIN users u ON r.applicant_id = u.id
-    WHERE r.post_id = ?
-  `,
-    [req.params.post_id],
-  );
-  res.json(applications);
+  try {
+    const [applications] = await db.execute(
+      `
+      SELECT r.*, u.name, u.discipline, u.year, u.skills, u.github
+      FROM applications r
+      JOIN users u ON r.applicant_id = u.id
+      WHERE r.post_id = ?
+    `,
+      [req.params.post_id],
+    );
+    res.json(applications);
+  } catch (error) {
+    console.error("Error fetching applications:", error);
+    res.status(500).json({ error: "Failed to fetch applications" });
+  }
+});
+
+// Get ranked applicants for a post (by skill fit)
+app.get("/applications/:post_id/ranked", async (req, res) => {
+  try {
+    const [posts] = await db.execute("SELECT * FROM posts WHERE id = ?", [
+      req.params.post_id,
+    ]);
+    if (!posts.length) {
+      return res.status(404).json({ error: "Post not found" });
+    }
+
+    const [applications] = await db.execute(
+      `
+      SELECT r.*, u.name, u.discipline, u.year, u.skills, u.github
+      FROM applications r
+      JOIN users u ON r.applicant_id = u.id
+      WHERE r.post_id = ?
+    `,
+      [req.params.post_id],
+    );
+
+    const post = parseJsonFields(posts[0]);
+    const postSkills = parseJSON(post.skills_needed || []);
+
+    // Rank applicants by skill fit
+    const ranked = applications
+      .map((applicant) => {
+        const applicantData = parseJsonFields(applicant);
+        const applicantSkills = parseJSON(applicantData.skills || []);
+        const fitScore = jaccardScore(applicantSkills, postSkills);
+        return { ...applicantData, fit_score: fitScore };
+      })
+      .sort((a, b) => b.fit_score - a.fit_score);
+
+    res.json({ post: post.title, applicants: ranked });
+  } catch (error) {
+    console.error("Error ranking applicants:", error);
+    res.status(500).json({ error: "Failed to rank applicants" });
+  }
 });
 
 // Get all applications by a user
@@ -376,6 +522,59 @@ app.patch("/applications/:id", async (req, res) => {
     req.params.id,
   ]);
   res.json({ message: `Request ${status}!` });
+});
+
+// Feed endpoint: Get posts sorted by compatibility score for a user
+app.get("/feed/:user_id", async (req, res) => {
+  try {
+    // Fetch the logged in user
+    const [users] = await db.execute("SELECT * FROM users WHERE id = ?", [
+      req.params.user_id,
+    ]);
+    if (!users.length) {
+      return res.status(404).json({ error: "User not found" });
+    }
+
+    const user = parseJsonFields(users[0]);
+    const userSkills = parseJSON(user.skills || []);
+    const userInterests = parseJSON(user.interests || []);
+
+    // Fetch all posts (excluding the user's own)
+    const [posts] = await db.execute(
+      `
+      SELECT p.*, u.name as poster_name, u.discipline, u.year
+      FROM posts p
+      JOIN users u ON p.poster_id = u.id
+      WHERE p.poster_id != ?
+      ORDER BY p.created_at DESC
+    `,
+      [req.params.user_id],
+    );
+
+    // Score each post
+    const scored = posts.map((post) => {
+      const parsed = parseJsonFields(post);
+      const postSkills = parseJSON(parsed.skills_needed || []);
+
+      const skillScore = jaccardScore(userSkills, postSkills);
+      const interestScore = jaccardScore(userInterests, postSkills);
+      const finalScore = calculateCompatibilityScore(
+        userSkills,
+        userInterests,
+        postSkills,
+      );
+
+      return { ...parsed, compatibility_score: finalScore };
+    });
+
+    // Sort highest score first
+    scored.sort((a, b) => b.compatibility_score - a.compatibility_score);
+
+    res.json({ user: user.name, listings: scored });
+  } catch (error) {
+    console.error("Error fetching feed:", error);
+    res.status(500).json({ error: "Failed to fetch feed" });
+  }
 });
 
 app.listen(3000, () => console.log("Server running on http://localhost:3000"));

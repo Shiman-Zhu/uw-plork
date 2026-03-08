@@ -166,7 +166,13 @@ export const api = {
           tagline: parsed.description || "",
           category: "SOFTWARE", // Default, could be stored in DB
           stage: "IDEA", // Default
-          match: Math.floor(Math.random() * 20) + 70,
+          match:
+            parsed.compatibility_score !== null &&
+            parsed.compatibility_score !== undefined
+              ? parsed.compatibility_score
+              : parsed.yours
+                ? 100
+                : 0, // Use real compatibility score, or 100 for own posts, 0 for others
           commitment: parsed.commitment || "SERIOUS",
           roles: roles,
           spots: parsed.spots || 1,
