@@ -7,7 +7,6 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-// Helper function to parse JSON fields from database
 const parseJsonFields = (obj) => {
   if (!obj) return obj;
   const parsed = { ...obj };
@@ -42,14 +41,12 @@ const parseJsonFields = (obj) => {
   return parsed;
 };
 
-// Helper function to parse JSON (handles arrays, strings, and comma-separated strings)
 const parseJSON = (val) => {
   if (!val) return [];
-  if (Array.isArray(val)) return val; // Already an array, just return it
+  if (Array.isArray(val)) return val;
   try {
     return JSON.parse(val);
   } catch {
-    // If JSON.parse fails, try splitting by comma
     return val
       .split(",")
       .map((s) => s.trim())
@@ -57,8 +54,6 @@ const parseJSON = (val) => {
   }
 };
 
-// ── Jaccard Similarity Score ────────────────────────────────────────────────
-// Calculates similarity between two skill sets using Jaccard coefficient
 function jaccardScore(userSkills, postSkills) {
   const a = new Set(userSkills);
   const b = new Set(postSkills);
@@ -68,9 +63,6 @@ function jaccardScore(userSkills, postSkills) {
   return Math.round((intersection / union) * 100);
 }
 
-// ── Calculate Compatibility Score ──────────────────────────────────────────
-// For WORK mode: only uses skills
-// For PLAY mode: only uses interests
 function calculateCompatibilityScore(
   userSkills,
   userInterests,
@@ -78,10 +70,8 @@ function calculateCompatibilityScore(
   mode = "WORK",
 ) {
   if (mode === "WORK") {
-    // WORK mode: only consider skills
     return jaccardScore(userSkills, postSkills);
   } else {
-    // PLAY mode: only consider interests
     return jaccardScore(userInterests, postSkills);
   }
 }
@@ -90,7 +80,6 @@ app.get("/", (req, res) => {
   res.json({ message: "uw-plork API is running!" });
 });
 
-// Login endpoint
 app.post("/auth/login", async (req, res) => {
   try {
     const { email, password } = req.body;
@@ -131,9 +120,6 @@ app.post("/auth/login", async (req, res) => {
   }
 });
 
-/** USERS!!!*/
-
-// Create user
 app.post("/users", async (req, res) => {
   try {
     const {
@@ -186,13 +172,11 @@ app.post("/users", async (req, res) => {
   }
 });
 
-// Get all users
 app.get("/users", async (req, res) => {
   const [users] = await db.execute("SELECT * FROM users");
   res.json(users);
 });
 
-// Get user by ID
 app.get("/users/:id", async (req, res) => {
   try {
     const [users] = await db.execute("SELECT * FROM users WHERE id = ?", [
@@ -208,7 +192,6 @@ app.get("/users/:id", async (req, res) => {
   }
 });
 
-// Update user
 app.put("/users/:id", async (req, res) => {
   try {
     const {
@@ -225,8 +208,6 @@ app.put("/users/:id", async (req, res) => {
       github,
     } = req.body;
 
-    // Note: 'built' field is not in the database schema, so we skip it
-    // If you want to store 'built', add it to the database schema first
     let updateQuery = `UPDATE users SET name = ?, email = ?, discipline = ?, year = ?, skills = ?, interests = ?, terms = ?, commitment = ?, github = ?`;
     let params = [
       name,
@@ -241,7 +222,6 @@ app.put("/users/:id", async (req, res) => {
       req.params.id,
     ];
 
-    // If password is provided, hash it and update
     if (password) {
       const hashedPassword = await bcrypt.hash(password, 10);
       updateQuery = `UPDATE users SET name = ?, email = ?, password = ?, discipline = ?, year = ?, skills = ?, interests = ?, terms = ?, commitment = ?, github = ?`;
@@ -263,7 +243,6 @@ app.put("/users/:id", async (req, res) => {
     updateQuery += ` WHERE id = ?`;
     await db.execute(updateQuery, params);
 
-    // Fetch updated user with all fields
     const [users] = await db.execute("SELECT * FROM users WHERE id = ?", [
       req.params.id,
     ]);
@@ -279,9 +258,6 @@ app.put("/users/:id", async (req, res) => {
   }
 });
 
-/** POST!!!!!!!!!!!!!!!!!!!!!!!! */
-
-// Create a post
 app.post("/posts", async (req, res) => {
   try {
     const {
@@ -314,7 +290,6 @@ app.post("/posts", async (req, res) => {
       ],
     );
 
-    // Return the created post with its ID
     const [posts] = await db.execute(
       `SELECT p.*, u.name as poster_name, u.discipline, u.year
       FROM posts p
@@ -337,13 +312,11 @@ app.post("/posts", async (req, res) => {
   }
 });
 
-// Get all posts
 app.get("/posts", async (req, res) => {
   try {
-    const userId = req.query.userId; // Optional: current user ID to check ownership and calculate compatibility
-    const mode = req.query.mode || "WORK"; // WORK or PLAY mode
+    const userId = req.query.userId;
+    const mode = req.query.mode || "WORK";
 
-    // If userId is provided, fetch user data for compatibility calculation
     let userSkills = [];
     let userInterests = [];
     if (userId) {
@@ -368,12 +341,10 @@ app.get("/posts", async (req, res) => {
       ORDER BY p.created_at DESC
     `);
 
-    // Add 'yours' flag and compatibility score if userId is provided
     const postsWithOwnership = posts.map((post) => {
       const parsed = parseJsonFields(post);
       const isYours = userId ? post.poster_id === parseInt(userId) : false;
 
-      // Calculate compatibility score if userId is provided and it's not the user's own post
       let compatibilityScore = null;
       if (userId && !isYours) {
         const postSkills = parseJSON(parsed.skills_needed || []);
@@ -408,13 +379,11 @@ app.get("/posts", async (req, res) => {
   }
 });
 
-// Get Post
 app.get("/posts/:id", async (req, res) => {
   try {
-    const userId = req.query.userId; // Optional: current user ID to check ownership and calculate compatibility
-    const mode = req.query.mode || "WORK"; // WORK or PLAY mode
+    const userId = req.query.userId;
+    const mode = req.query.mode || "WORK";
 
-    // If userId is provided, fetch user data for compatibility calculation
     let userSkills = [];
     let userInterests = [];
     if (userId) {
@@ -444,7 +413,6 @@ app.get("/posts/:id", async (req, res) => {
     const post = parseJsonFields(posts[0]);
     const isYours = userId ? posts[0].poster_id === parseInt(userId) : false;
 
-    // Calculate compatibility score if userId is provided and it's not the user's own post
     let compatibilityScore = null;
     if (userId && !isYours) {
       const postSkills = parseJSON(post.skills_needed || []);
@@ -474,7 +442,6 @@ app.get("/posts/:id", async (req, res) => {
   }
 });
 
-// Application
 app.post("/applications", async (req, res) => {
   const { post_id, applicant_id } = req.body;
   await db.execute(
@@ -484,7 +451,6 @@ app.post("/applications", async (req, res) => {
   res.json({ message: "Request sent!" });
 });
 
-// Get all applications for a post
 app.get("/applications/:post_id", async (req, res) => {
   try {
     const [applications] = await db.execute(
@@ -503,7 +469,6 @@ app.get("/applications/:post_id", async (req, res) => {
   }
 });
 
-// Get ranked applicants for a post (by skill fit)
 app.get("/applications/:post_id/ranked", async (req, res) => {
   try {
     const [posts] = await db.execute("SELECT * FROM posts WHERE id = ?", [
@@ -526,7 +491,6 @@ app.get("/applications/:post_id/ranked", async (req, res) => {
     const post = parseJsonFields(posts[0]);
     const postSkills = parseJSON(post.skills_needed || []);
 
-    // Rank applicants by skill fit
     const ranked = applications
       .map((applicant) => {
         const applicantData = parseJsonFields(applicant);
@@ -543,7 +507,6 @@ app.get("/applications/:post_id/ranked", async (req, res) => {
   }
 });
 
-// Get all applications by a user
 app.get("/applications/user/:user_id", async (req, res) => {
   const [applications] = await db.execute(
     `
@@ -557,7 +520,6 @@ app.get("/applications/user/:user_id", async (req, res) => {
   res.json(applications);
 });
 
-// Decision on applicants
 app.patch("/applications/:id", async (req, res) => {
   const { status } = req.body;
   await db.execute("UPDATE applications SET status = ? WHERE id = ?", [
@@ -567,12 +529,10 @@ app.patch("/applications/:id", async (req, res) => {
   res.json({ message: `Request ${status}!` });
 });
 
-// Feed endpoint: Get posts sorted by compatibility score for a user
 app.get("/feed/:user_id", async (req, res) => {
   try {
-    const mode = req.query.mode || "WORK"; // WORK or PLAY mode
+    const mode = req.query.mode || "WORK";
 
-    // Fetch the logged in user
     const [users] = await db.execute("SELECT * FROM users WHERE id = ?", [
       req.params.user_id,
     ]);
@@ -584,7 +544,6 @@ app.get("/feed/:user_id", async (req, res) => {
     const userSkills = parseJSON(user.skills || []);
     const userInterests = parseJSON(user.interests || []);
 
-    // Fetch all posts (excluding the user's own)
     const [posts] = await db.execute(
       `
       SELECT p.*, u.name as poster_name, u.discipline, u.year
@@ -596,7 +555,6 @@ app.get("/feed/:user_id", async (req, res) => {
       [req.params.user_id],
     );
 
-    // Score each post based on mode
     const scored = posts.map((post) => {
       const parsed = parseJsonFields(post);
       const postSkills = parseJSON(parsed.skills_needed || []);
@@ -609,7 +567,6 @@ app.get("/feed/:user_id", async (req, res) => {
       return { ...parsed, compatibility_score: finalScore };
     });
 
-    // Sort highest score first
     scored.sort((a, b) => b.compatibility_score - a.compatibility_score);
 
     res.json({ user: user.name, listings: scored });

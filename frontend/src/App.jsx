@@ -401,7 +401,6 @@ function PostModal({ mode, onClose, onSubmit, userId }) {
 }
 
 function ProfilePage({ profile, onSave, onBack, userId }) {
-  // Ensure all array fields are initialized as arrays
   const safeProfile = {
     name: profile?.name || "",
     email: profile?.email || "",
@@ -473,12 +472,9 @@ function ProfilePage({ profile, onSave, onBack, userId }) {
           </div>
             </div>
 
-      {/* Content */}
       <div style={{ display: "grid", gridTemplateColumns: "280px 1fr", minHeight: "calc(100vh - 52px)" }}>
 
-        {/* Left nav / identity summary */}
         <div style={{ borderRight: `1px solid ${C.rule}`, padding: "36px 28px", background: C.surface }}>
-          {/* Avatar */}
           <div style={{ width: 72, height: 72, background: C.limeLight, border: `1px solid ${C.lime}`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 32, marginBottom: 20 }}>
             🧑‍💻
         </div>
@@ -490,7 +486,6 @@ function ProfilePage({ profile, onSave, onBack, userId }) {
 
           <SectionDivider />
 
-          {/* Skills summary */}
           <SectionLabel>SKILLS</SectionLabel>
           <div style={{ display: "flex", flexWrap: "wrap", gap: 5, marginBottom: 24 }}>
             {Array.isArray(form.skills) && form.skills.length > 0
@@ -516,12 +511,10 @@ function ProfilePage({ profile, onSave, onBack, userId }) {
         </div>
       </div>
 
-        {/* Right: edit form */}
         <div style={{ overflowY: "auto", padding: "36px 48px", background: C.detail }}>
           <D size={36} style={{ display: "block", marginBottom: 4 }}>EDIT PROFILE</D>
           <p style={{ fontSize: 13, color: C.muted, marginBottom: 36 }}>Changes update your match score and visibility to other Plork users.</p>
 
-          {/* ─ Basic info ─ */}
           <SectionLabel>BASIC INFO</SectionLabel>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
             <FieldInput label="FULL NAME" value={form.name} onChange={v => u("name", v)} placeholder="Jamie Kim" />
@@ -534,7 +527,6 @@ function ProfilePage({ profile, onSave, onBack, userId }) {
 
           <SectionDivider />
 
-          {/* ─ Stream ─ */}
           <SectionLabel>YOUR STREAM</SectionLabel>
           <div style={{ marginBottom: 20 }}>
             <label style={{ fontSize: 10, color: C.muted, letterSpacing: "0.12em", display: "block", marginBottom: 10 }}>DISCIPLINE</label>
@@ -551,7 +543,6 @@ function ProfilePage({ profile, onSave, onBack, userId }) {
 
           <SectionDivider />
 
-          {/* ─ Skills ─ */}
           <SectionLabel>TECHNICAL SKILLS</SectionLabel>
           <div style={{ marginBottom: 20 }}>
             <div style={{ display: "flex", flexWrap: "wrap", gap: 7, marginBottom: 12 }}>
@@ -578,7 +569,6 @@ function ProfilePage({ profile, onSave, onBack, userId }) {
 
           <SectionDivider />
 
-          {/* ─ Interests ─ */}
           <SectionLabel>INTERESTS — shown in Play Mode</SectionLabel>
           <div style={{ marginBottom: 20 }}>
             <div style={{ display: "flex", flexWrap: "wrap", gap: 7, marginBottom: 12 }}>
@@ -626,7 +616,6 @@ function ProfilePage({ profile, onSave, onBack, userId }) {
           </div>
             </div>
 
-          {/* Save */}
           <div style={{ marginTop: 40, paddingTop: 28, borderTop: `1px solid ${C.rule}`, display: "flex", gap: 12, alignItems: "center" }}>
             <button onClick={handleSave} disabled={loading} style={{ fontSize: 12, letterSpacing: "0.1em", fontWeight: 700, padding: "12px 32px", border: "none", background: loading ? C.rule : C.lime, color: C.limeInk, cursor: loading ? "default" : "pointer", opacity: loading ? 0.6 : 1 }}>{loading ? "SAVING..." : "SAVE CHANGES"}</button>
             <button onClick={onBack} style={{ fontSize: 12, padding: "12px 24px", border: `1px solid ${C.rule}`, background: "transparent", color: C.muted, cursor: "pointer" }}>CANCEL</button>
@@ -714,8 +703,6 @@ function MainApp({ userId: propUserId, initialProfile }) {
     }
   };
 
-  // Refetch posts when profile skills/interests change (to update compatibility scores)
-  // Use a ref to track previous values to avoid infinite loops
   const prevSkillsRef = useRef(JSON.stringify(profile?.skills || []));
   const prevInterestsRef = useRef(JSON.stringify(profile?.interests || []));
   
@@ -724,7 +711,6 @@ function MainApp({ userId: propUserId, initialProfile }) {
       const currentSkills = JSON.stringify(profile.skills || []);
       const currentInterests = JSON.stringify(profile.interests || []);
       
-      // Only refetch if skills or interests actually changed
       if (currentSkills !== prevSkillsRef.current || currentInterests !== prevInterestsRef.current) {
         prevSkillsRef.current = currentSkills;
         prevInterestsRef.current = currentInterests;
@@ -733,7 +719,6 @@ function MainApp({ userId: propUserId, initialProfile }) {
         api.getProjects(mode, userId).then(data => {
           if (mode === "WORK") {
             setProjects(data);
-            // Keep current selection if it still exists
             if (selectedId && !data.find(p => p.id === selectedId)) {
               setSelectedId(data[0]?.id || null);
             }
@@ -759,7 +744,6 @@ function MainApp({ userId: propUserId, initialProfile }) {
       <style>{BASE_CSS}</style>
       {showPost && <PostModal mode={mode} onClose={() => setShowPost(false)} onSubmit={handlePost} userId={userId} />}
 
-      {/* ── TOP BAR ── */}
       <div style={{ display: "flex", alignItems: "stretch", borderBottom: `1px solid ${C.rule}`, height: 52, flexShrink: 0, background: C.bg }}>
         <div style={{ padding: "0 24px", display: "flex", alignItems: "center", borderRight: `1px solid ${C.rule}`, gap: 10 }}>
           <D size={24}>PLORK</D>
@@ -775,7 +759,6 @@ function MainApp({ userId: propUserId, initialProfile }) {
               <div style={{ fontSize: 12, color: C.body }}>{v}</div>
             </div>
           ))}
-          {/* Profile avatar — clickable */}
           <button onClick={() => setShowProfile(true)} style={{ padding: "0 18px", display: "flex", alignItems: "center", gap: 10, background: "transparent", border: "none", cursor: "pointer", borderLeft: `1px solid ${C.rule}` }}>
             <div style={{ width: 32, height: 32, border: `1px solid ${C.rule}`, background: C.surface, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 15 }}>🧑‍💻</div>
             <M style={{ fontSize: 11, color: C.body }}>{profile.name ? profile.name.split(" ")[0] : "Profile"}</M>
@@ -783,10 +766,8 @@ function MainApp({ userId: propUserId, initialProfile }) {
         </div>
       </div>
 
-      {/* ── BODY ── */}
       <div className="app-layout" style={{ flex: 1, display: "flex", overflow: "hidden" }}>
 
-        {/* ── SIDEBAR ── */}
         <div className="app-sidebar" style={{ width: 300, borderRight: `1px solid ${C.rule}`, display: "flex", flexDirection: "column", overflow: "hidden", flexShrink: 0, background: C.bg }}>
           <div style={{ padding: "12px 16px", borderBottom: `1px solid ${C.rule}` }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
@@ -841,11 +822,9 @@ function MainApp({ userId: propUserId, initialProfile }) {
           </div>
         </div>
 
-        {/* ── DETAIL PANEL ── */}
         {sel && (
           <div key={selectedId} className="fade-up" style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden", background: C.detail }}>
 
-            {/* Header */}
             <div style={{ padding: "28px 36px 0", borderBottom: `1px solid ${C.rule}`, background: C.detail }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 18 }}>
                 <div style={{ flex: 1, minWidth: 0, paddingRight: 24 }}>
@@ -870,7 +849,6 @@ function MainApp({ userId: propUserId, initialProfile }) {
               </div>
             </div>
 
-            {/* Tab content */}
             <div style={{ flex: 1, overflowY: "auto", padding: "32px 36px" }}>
 
               {(tab === "ROLES" || tab === "SPOTS") && (
