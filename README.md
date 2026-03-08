@@ -74,7 +74,7 @@ This gives the poster a stable, merit-based ordering — the applicant at the to
 | Layer | Technology |
 |---|---|
 | Frontend | React + CSS |
-| Backend | Node.js |
+| Backend | Node.js + Express |
 | Database | MySQL |
 | Algorithm | Jaccard Similarity + Gale-Shapley Inspired Ranking |
 
