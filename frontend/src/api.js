@@ -148,9 +148,12 @@ export const api = {
   // ── PROJECTS / ACTIVITIES ─────────────────────────────────────────────────
   getProjects: async (mode, userId = null) => {
     try {
+      // Map frontend mode to backend mode
+      const backendMode =
+        mode === "WORK" ? "WORK" : mode === "PLAY" ? "PLAY" : "WORK";
       const url = userId
-        ? `${API_BASE}/posts?userId=${userId}`
-        : `${API_BASE}/posts`;
+        ? `${API_BASE}/posts?userId=${userId}&mode=${backendMode}`
+        : `${API_BASE}/posts?mode=${backendMode}`;
       const response = await fetch(url);
       if (!response.ok) throw new Error("Failed to fetch posts");
       const posts = await response.json();

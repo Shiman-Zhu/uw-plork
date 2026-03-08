@@ -69,12 +69,21 @@ function jaccardScore(userSkills, postSkills) {
 }
 
 // ── Calculate Compatibility Score ──────────────────────────────────────────
-// Combines skill match (70%) and interest match (30%)
-function calculateCompatibilityScore(userSkills, userInterests, postSkills) {
-  const skillScore = jaccardScore(userSkills, postSkills);
-  const interestScore = jaccardScore(userInterests, postSkills);
-  const finalScore = Math.round(skillScore * 0.7 + interestScore * 0.3);
-  return finalScore;
+// For WORK mode: only uses skills
+// For PLAY mode: only uses interests
+function calculateCompatibilityScore(
+  userSkills,
+  userInterests,
+  postSkills,
+  mode = "WORK",
+) {
+  if (mode === "WORK") {
+    // WORK mode: only consider skills
+    return jaccardScore(userSkills, postSkills);
+  } else {
+    // PLAY mode: only consider interests
+    return jaccardScore(userInterests, postSkills);
+  }
 }
 
 app.get("/", (req, res) => {
@@ -332,6 +341,7 @@ app.post("/posts", async (req, res) => {
 app.get("/posts", async (req, res) => {
   try {
     const userId = req.query.userId; // Optional: current user ID to check ownership and calculate compatibility
+    const mode = req.query.mode || "WORK"; // WORK or PLAY mode
 
     // If userId is provided, fetch user data for compatibility calculation
     let userSkills = [];
@@ -365,13 +375,23 @@ app.get("/posts", async (req, res) => {
 
       // Calculate compatibility score if userId is provided and it's not the user's own post
       let compatibilityScore = null;
-      if (userId && !isYours && userSkills.length > 0) {
+      if (userId && !isYours) {
         const postSkills = parseJSON(parsed.skills_needed || []);
-        compatibilityScore = calculateCompatibilityScore(
-          userSkills,
-          userInterests,
-          postSkills,
-        );
+        if (mode === "WORK" && userSkills.length > 0) {
+          compatibilityScore = calculateCompatibilityScore(
+            userSkills,
+            userInterests,
+            postSkills,
+            "WORK",
+          );
+        } else if (mode === "PLAY" && userInterests.length > 0) {
+          compatibilityScore = calculateCompatibilityScore(
+            userSkills,
+            userInterests,
+            postSkills,
+            "PLAY",
+          );
+        }
       }
 
       return {
@@ -392,6 +412,7 @@ app.get("/posts", async (req, res) => {
 app.get("/posts/:id", async (req, res) => {
   try {
     const userId = req.query.userId; // Optional: current user ID to check ownership and calculate compatibility
+    const mode = req.query.mode || "WORK"; // WORK or PLAY mode
 
     // If userId is provided, fetch user data for compatibility calculation
     let userSkills = [];
@@ -425,13 +446,23 @@ app.get("/posts/:id", async (req, res) => {
 
     // Calculate compatibility score if userId is provided and it's not the user's own post
     let compatibilityScore = null;
-    if (userId && !isYours && userSkills.length > 0) {
+    if (userId && !isYours) {
       const postSkills = parseJSON(post.skills_needed || []);
-      compatibilityScore = calculateCompatibilityScore(
-        userSkills,
-        userInterests,
-        postSkills,
-      );
+      if (mode === "WORK" && userSkills.length > 0) {
+        compatibilityScore = calculateCompatibilityScore(
+          userSkills,
+          userInterests,
+          postSkills,
+          "WORK",
+        );
+      } else if (mode === "PLAY" && userInterests.length > 0) {
+        compatibilityScore = calculateCompatibilityScore(
+          userSkills,
+          userInterests,
+          postSkills,
+          "PLAY",
+        );
+      }
     }
 
     post.yours = isYours;
@@ -539,6 +570,8 @@ app.patch("/applications/:id", async (req, res) => {
 // Feed endpoint: Get posts sorted by compatibility score for a user
 app.get("/feed/:user_id", async (req, res) => {
   try {
+    const mode = req.query.mode || "WORK"; // WORK or PLAY mode
+
     // Fetch the logged in user
     const [users] = await db.execute("SELECT * FROM users WHERE id = ?", [
       req.params.user_id,
@@ -563,19 +596,16 @@ app.get("/feed/:user_id", async (req, res) => {
       [req.params.user_id],
     );
 
-    // Score each post
+    // Score each post based on mode
     const scored = posts.map((post) => {
       const parsed = parseJsonFields(post);
       const postSkills = parseJSON(parsed.skills_needed || []);
-
-      const skillScore = jaccardScore(userSkills, postSkills);
-      const interestScore = jaccardScore(userInterests, postSkills);
       const finalScore = calculateCompatibilityScore(
         userSkills,
         userInterests,
         postSkills,
+        mode,
       );
-
       return { ...parsed, compatibility_score: finalScore };
     });
 
