@@ -453,24 +453,9 @@ app.post("/applications", async (req, res) => {
 
 app.get("/applications/:post_id", async (req, res) => {
   try {
-    const [applications] = await db.execute(
-      `
-      SELECT r.*, u.name, u.discipline, u.year, u.skills, u.github
-      FROM applications r
-      JOIN users u ON r.applicant_id = u.id
-      WHERE r.post_id = ?
-    `,
-      [req.params.post_id],
-    );
-    res.json(applications);
-  } catch (error) {
-    console.error("Error fetching applications:", error);
-    res.status(500).json({ error: "Failed to fetch applications" });
-  }
-});
+    const mode = req.query.mode || "WORK"; // WORK or PLAY mode
 
-app.get("/applications/:post_id/ranked", async (req, res) => {
-  try {
+    // Get the post to determine required skills
     const [posts] = await db.execute("SELECT * FROM posts WHERE id = ?", [
       req.params.post_id,
     ]);
@@ -480,7 +465,59 @@ app.get("/applications/:post_id/ranked", async (req, res) => {
 
     const [applications] = await db.execute(
       `
-      SELECT r.*, u.name, u.discipline, u.year, u.skills, u.github
+      SELECT r.*, u.name, u.discipline, u.year, u.skills, u.interests, u.github
+      FROM applications r
+      JOIN users u ON r.applicant_id = u.id
+      WHERE r.post_id = ?
+    `,
+      [req.params.post_id],
+    );
+
+    const post = parseJsonFields(posts[0]);
+    const postSkills = parseJSON(post.skills_needed || []);
+
+    // Calculate compatibility score for each applicant based on mode
+    const applicantsWithScores = applications.map((application) => {
+      const applicantData = parseJsonFields(application);
+      const applicantSkills = parseJSON(applicantData.skills || []);
+      const applicantInterests = parseJSON(applicantData.interests || []);
+
+      const compatibilityScore = calculateCompatibilityScore(
+        applicantSkills,
+        applicantInterests,
+        postSkills,
+        mode,
+      );
+
+      return { ...applicantData, compatibility_score: compatibilityScore };
+    });
+
+    // Sort by compatibility score (descending)
+    applicantsWithScores.sort(
+      (a, b) => b.compatibility_score - a.compatibility_score,
+    );
+
+    res.json(applicantsWithScores);
+  } catch (error) {
+    console.error("Error fetching applications:", error);
+    res.status(500).json({ error: "Failed to fetch applications" });
+  }
+});
+
+app.get("/applications/:post_id/ranked", async (req, res) => {
+  try {
+    const mode = req.query.mode || "WORK"; // WORK or PLAY mode
+
+    const [posts] = await db.execute("SELECT * FROM posts WHERE id = ?", [
+      req.params.post_id,
+    ]);
+    if (!posts.length) {
+      return res.status(404).json({ error: "Post not found" });
+    }
+
+    const [applications] = await db.execute(
+      `
+      SELECT r.*, u.name, u.discipline, u.year, u.skills, u.interests, u.github
       FROM applications r
       JOIN users u ON r.applicant_id = u.id
       WHERE r.post_id = ?
@@ -495,8 +532,18 @@ app.get("/applications/:post_id/ranked", async (req, res) => {
       .map((applicant) => {
         const applicantData = parseJsonFields(applicant);
         const applicantSkills = parseJSON(applicantData.skills || []);
-        const fitScore = jaccardScore(applicantSkills, postSkills);
-        return { ...applicantData, fit_score: fitScore };
+        const applicantInterests = parseJSON(applicantData.interests || []);
+        const compatibilityScore = calculateCompatibilityScore(
+          applicantSkills,
+          applicantInterests,
+          postSkills,
+          mode,
+        );
+        return {
+          ...applicantData,
+          fit_score: compatibilityScore,
+          compatibility_score: compatibilityScore,
+        };
       })
       .sort((a, b) => b.fit_score - a.fit_score);
 
@@ -518,6 +565,70 @@ app.get("/applications/user/:user_id", async (req, res) => {
     [req.params.user_id],
   );
   res.json(applications);
+});
+
+// Get top matching users for a post (users who haven't applied yet)
+app.get("/posts/:post_id/top-matches", async (req, res) => {
+  try {
+    const mode = req.query.mode || "WORK"; // WORK or PLAY mode
+    const limit = parseInt(req.query.limit) || 20; // Number of top matches to return
+
+    // Get the post
+    const [posts] = await db.execute("SELECT * FROM posts WHERE id = ?", [
+      req.params.post_id,
+    ]);
+    if (!posts.length) {
+      return res.status(404).json({ error: "Post not found" });
+    }
+
+    const post = parseJsonFields(posts[0]);
+    const postSkills = parseJSON(post.skills_needed || []);
+    const posterId = post.poster_id;
+
+    // Get existing applicants to exclude them
+    const [existingApplications] = await db.execute(
+      "SELECT applicant_id FROM applications WHERE post_id = ?",
+      [req.params.post_id],
+    );
+    const applicantIds = existingApplications.map((app) => app.applicant_id);
+
+    // Build query to exclude poster and existing applicants
+    let excludeIds = [posterId, ...applicantIds];
+    const placeholders = excludeIds.map(() => "?").join(",");
+
+    // Get all users except the poster and existing applicants
+    const [users] = await db.execute(
+      `SELECT * FROM users WHERE id NOT IN (${placeholders})`,
+      excludeIds,
+    );
+
+    // Calculate compatibility score for each user
+    const usersWithScores = users.map((user) => {
+      const userData = parseJsonFields(user);
+      const userSkills = parseJSON(userData.skills || []);
+      const userInterests = parseJSON(userData.interests || []);
+
+      const compatibilityScore = calculateCompatibilityScore(
+        userSkills,
+        userInterests,
+        postSkills,
+        mode,
+      );
+
+      return { ...userData, compatibility_score: compatibilityScore };
+    });
+
+    // Sort by compatibility score (descending) and take top N
+    usersWithScores.sort(
+      (a, b) => b.compatibility_score - a.compatibility_score,
+    );
+    const topMatches = usersWithScores.slice(0, limit);
+
+    res.json({ post: post.title, matches: topMatches });
+  } catch (error) {
+    console.error("Error fetching top matches:", error);
+    res.status(500).json({ error: "Failed to fetch top matches" });
+  }
 });
 
 app.patch("/applications/:id", async (req, res) => {
