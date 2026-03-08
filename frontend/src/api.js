@@ -1,8 +1,5 @@
-// API LAYER - Connected to backend API at http://localhost:3000
-
 const API_BASE = "http://localhost:3000";
 
-// Helper function to parse JSON fields from database
 const parseJsonFields = (obj) => {
   if (!obj) return obj;
   const parsed = { ...obj };
@@ -38,7 +35,6 @@ const parseJsonFields = (obj) => {
 };
 
 export const api = {
-  // ── AUTH ──────────────────────────────────────────────────────────────────
   login: async (email, password) => {
     try {
       const response = await fetch(`${API_BASE}/auth/login`, {
@@ -100,7 +96,6 @@ export const api = {
     }
   },
 
-  // ── PROFILE ───────────────────────────────────────────────────────────────
   getProfile: async (userId) => {
     try {
       const response = await fetch(`${API_BASE}/users/${userId}`);
@@ -125,11 +120,18 @@ export const api = {
           year: data.year,
           skills: data.skills || [],
           interests: data.interests || [],
+          terms: data.terms || [],
+          built: data.built || "",
           commitment: data.commitment,
           github: data.github || "",
         }),
       });
-      if (!response.ok) throw new Error("Update failed");
+      if (!response.ok) {
+        const errorData = await response
+          .json()
+          .catch(() => ({ error: "Update failed" }));
+        throw new Error(errorData.error || "Update failed");
+      }
       const updated = await response.json();
       return parseJsonFields(updated);
     } catch (error) {
@@ -138,18 +140,18 @@ export const api = {
     }
   },
 
-  // ── PROJECTS / ACTIVITIES ─────────────────────────────────────────────────
   getProjects: async (mode, userId = null) => {
     try {
+      const backendMode =
+        mode === "WORK" ? "WORK" : mode === "PLAY" ? "PLAY" : "WORK";
       const url = userId
-        ? `${API_BASE}/posts?userId=${userId}`
-        : `${API_BASE}/posts`;
+        ? `${API_BASE}/posts?userId=${userId}&mode=${backendMode}`
+        : `${API_BASE}/posts?mode=${backendMode}`;
       const response = await fetch(url);
       if (!response.ok) throw new Error("Failed to fetch posts");
       const posts = await response.json();
       return posts.map((post) => {
         const parsed = parseJsonFields(post);
-        // Transform skills_needed array into roles structure
         const skillsNeeded = parsed.skills_needed || [];
         const roles =
           skillsNeeded.length > 0
@@ -164,9 +166,15 @@ export const api = {
           id: parsed.id,
           name: parsed.title,
           tagline: parsed.description || "",
-          category: "SOFTWARE", // Default, could be stored in DB
-          stage: "IDEA", // Default
-          match: Math.floor(Math.random() * 20) + 70,
+          category: "SOFTWARE",
+          stage: "IDEA",
+          match:
+            parsed.compatibility_score !== null &&
+            parsed.compatibility_score !== undefined
+              ? parsed.compatibility_score
+              : parsed.yours
+                ? 100
+                : 0,
           commitment: parsed.commitment || "SERIOUS",
           roles: roles,
           spots: parsed.spots || 1,
@@ -187,7 +195,6 @@ export const api = {
     try {
       if (!userId) throw new Error("User ID required");
 
-      // Transform roles into skills_needed array
       const skillsNeeded = data.roles
         ? data.roles.map((r) => r.skills || []).flat()
         : [];
@@ -218,7 +225,6 @@ export const api = {
 
       const created = parseJsonFields(await response.json());
 
-      // Transform back to frontend format
       return {
         id: created.id,
         name: created.title,
@@ -249,7 +255,6 @@ export const api = {
     }
   },
 
-  // ── APPLICATIONS ──────────────────────────────────────────────────────────
   submitApplication: async (postId, userId) => {
     try {
       const response = await fetch(`${API_BASE}/applications`, {
@@ -276,6 +281,32 @@ export const api = {
     } catch (error) {
       console.error("Error fetching applications:", error);
       return [];
+    }
+  },
+
+  getApplicantsForPost: async (postId, mode = "WORK") => {
+    try {
+      const response = await fetch(
+        `${API_BASE}/applications/${postId}?mode=${mode}`,
+      );
+      if (!response.ok) throw new Error("Failed to fetch applicants");
+      return await response.json();
+    } catch (error) {
+      console.error("Error fetching applicants:", error);
+      return [];
+    }
+  },
+
+  getTopMatchesForPost: async (postId, mode = "WORK", limit = 20) => {
+    try {
+      const response = await fetch(
+        `${API_BASE}/posts/${postId}/top-matches?mode=${mode}&limit=${limit}`,
+      );
+      if (!response.ok) throw new Error("Failed to fetch top matches");
+      return await response.json();
+    } catch (error) {
+      console.error("Error fetching top matches:", error);
+      return { post: "", matches: [] };
     }
   },
 };

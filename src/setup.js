@@ -1,6 +1,5 @@
 import db from "./db.js";
 
-// USERS
 await db.execute(`
   CREATE TABLE IF NOT EXISTS users (
     id          INT AUTO_INCREMENT PRIMARY KEY,
@@ -18,7 +17,6 @@ await db.execute(`
   )
 `);
 
-// Add password column if it doesn't exist (for existing tables)
 try {
   await db.execute(`
     ALTER TABLE users 
@@ -31,7 +29,6 @@ try {
   }
 }
 
-// "post"
 await db.execute(`
   CREATE TABLE IF NOT EXISTS posts (
     id            INT AUTO_INCREMENT PRIMARY KEY,
@@ -48,7 +45,6 @@ await db.execute(`
   )
 `);
 
-// application side
 await db.execute(`
   CREATE TABLE IF NOT EXISTS applications (
     id            INT AUTO_INCREMENT PRIMARY KEY,
