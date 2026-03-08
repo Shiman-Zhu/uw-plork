@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { api } from "./api";
 
-const ALL_TERMS = ["W26", "S26", "F26", "W27", "S27", "F27", "W27"];
+const ALL_TERMS = ["W26", "S26", "F26", "W27", "S27", "F27", "W28"];
 const SKILL_OPTIONS = ["React", "TypeScript", "Python", "ML/AI", "Embedded C", "PCB Design", "CAD", "Rust", "Node.js", "FPGA", "Computer Vision", "iOS", "Java", "C++", "Figma", "Verilog", "Swift", "Docker"];
 const DISCIPLINE_OPTIONS = ["ECE", "MTE", "SE", "CE", "ME", "CHE", "CIVE", "ENVE", "NANO", "SYDE", "TRON", "BME"];
 const YEAR_OPTIONS = ["1A", "1B", "2A", "2B", "3A", "3B", "4A", "4B"];
