@@ -1,68 +1,6 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 
-const INIT_PROJECTS = [
-  {
-    id: 1, name: "SOLARIS", tagline: "Solar-powered autonomous campus weather network",
-    category: "HARDWARE", stage: "POC", match: 94, commitment: "SERIOUS",
-    roles: [
-      { title: "Firmware Engineer", skills: ["Embedded C", "FPGA"], filled: true, member: "A. Singh" },
-      { title: "ML Engineer", skills: ["Python", "ML/AI"], filled: true, member: "P. Mehta" },
-      { title: "PCB Designer", skills: ["PCB Design", "KiCad"], filled: false },
-      { title: "Backend Developer", skills: ["Node.js", "Python"], filled: false },
-    ],
-    terms: { founder: ["W25", "F25", "W26"], overlap: ["W25", "F25", "W26"] },
-    velocity: true, yours: false,
-  },
-  {
-    id: 2, name: "NEXUS AR", tagline: "AR overlay for E5/E7 lab equipment manuals",
-    category: "SOFTWARE", stage: "IDEA", match: 78, commitment: "CASUAL",
-    roles: [
-      { title: "iOS Developer", skills: ["iOS", "Swift"], filled: true, member: "D. Wang" },
-      { title: "3D Designer", skills: ["CAD", "Blender"], filled: false },
-      { title: "CV Engineer", skills: ["Computer Vision", "Python"], filled: false },
-    ],
-    terms: { founder: ["S25", "F25"], overlap: ["F25"] },
-    velocity: false, yours: false,
-  },
-  {
-    id: 3, name: "WATERVAULT", tagline: "Encrypted academic resource sharing for UW students",
-    category: "SOFTWARE", stage: "PROTOTYPE", match: 88, commitment: "STARTUP",
-    roles: [
-      { title: "Security Engineer", skills: ["Rust", "Crypto"], filled: true, member: "K. Liu" },
-      { title: "Frontend Developer", skills: ["React", "TypeScript"], filled: false },
-      { title: "DevOps Engineer", skills: ["Docker", "Node.js"], filled: false },
-    ],
-    terms: { founder: ["W25", "S25", "F25", "W26"], overlap: ["W25", "F25", "W26"] },
-    velocity: true, yours: false,
-  },
-];
-
-const INIT_ACTIVITIES = [
-  {
-    id: 4, name: "BADMINTON", tagline: "Competitive doubles — looking for consistent partners",
-    category: "SPORT", type: "COMPETITIVE", match: 91, spots: 2,
-    terms: { overlap: ["W25", "F25", "W26"] }, tags: ["Doubles", "PAC", "Competitive"], yours: false,
-  },
-  {
-    id: 5, name: "JAZZ BAND", tagline: "Small ensemble, plays CIF events and campus shows",
-    category: "MUSIC", type: "RECREATIONAL", match: 65, spots: 3,
-    terms: { overlap: ["S25", "F25"] }, tags: ["Jazz", "Brass", "Casual"], yours: false,
-  },
-];
-
-const INIT_PROFILE = {
-  name: "Jamie Kim", email: "jkim@uwaterloo.ca",
-  discipline: "ECE", year: "3A",
-  skills: ["React", "TypeScript", "ML/AI", "Python"],
-  interests: ["Badminton", "Chess", "Music"],
-  built: "Built a lane-detection model for Midnight Sun. Shipped a React dashboard for 500 users.",
-  terms: ["W25", "F25", "W26"],
-  commitment: "SERIOUS",
-  github: "github.com/jkim",
-};
-
-const ALL_TERMS = ["W24", "S24", "F24", "W25", "S25", "F25", "W26"];
-const YOU_TERMS = ["W25", "F25", "W26"];
+const ALL_TERMS = ["W26", "S26", "F26", "W27", "S27", "F27", "W27"];
 const SKILL_OPTIONS = ["React", "TypeScript", "Python", "ML/AI", "Embedded C", "PCB Design", "CAD", "Rust", "Node.js", "FPGA", "Computer Vision", "iOS", "Java", "C++", "Figma", "Verilog", "Swift", "Docker"];
 const DISCIPLINE_OPTIONS = ["ECE", "MTE", "SE", "CE", "ME", "CHE", "CIVE", "ENVE", "NANO", "SYDE", "TRON", "BME"];
 const YEAR_OPTIONS = ["1A", "1B", "2A", "2B", "3A", "3B", "4A", "4B"];
@@ -228,31 +166,18 @@ function Landing({ onLogin, onSignup }) {
           </div>
           <div style={{ borderBottom: `1px solid ${C.rule}`, padding: "32px 48px" }}>
             <SectionLabel>CO-OP OVERLAP CALENDAR</SectionLabel>
-            {[{ n: "YOU", t: ["W25", "F25", "W26"] }, { n: "ARJUN", t: ["W25", "S25", "F25", "W26"] }, { n: "PRIYA", t: ["F25", "W26"] }].map(p => (
-              <div key={p.n} style={{ display: "flex", alignItems: "center", gap: 14, marginBottom: 10 }}>
-                <M style={{ width: 52, fontSize: 10, color: C.muted }}>{p.n}</M>
-                <div style={{ display: "flex", gap: 5 }}>
-                  {ALL_TERMS.slice(3).map(t => { const a = p.t.includes(t), ov = a && YOU_TERMS.includes(t); return <div key={t} style={{ width: 30, height: 14, background: ov ? C.lime : a ? C.ink : C.rule }} />; })}
-                </div>
-              </div>
-            ))}
-            <div style={{ display: "flex", gap: 5, marginTop: 6, paddingLeft: 66 }}>
+            <p style={{ fontSize: 12, color: C.muted, lineHeight: 1.6, marginBottom: 16 }}>
+              Plork shows you when team members are on campus at the same time, making it easier to coordinate projects and activities.
+            </p>
+            <div style={{ display: "flex", gap: 5, marginTop: 6 }}>
               {ALL_TERMS.slice(3).map(t => <M key={t} style={{ width: 30, fontSize: 8, color: C.muted, textAlign: "center" }}>{t}</M>)}
             </div>
           </div>
           <div style={{ padding: "32px 48px" }}>
             <SectionLabel>ROLE SLOT SYSTEM</SectionLabel>
-            <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 14 }}>
-              <D size={20}>SOLARIS</D>
-              <M style={{ fontSize: 13, fontWeight: 700, color: C.lime }}>94% MATCH</M>
-            </div>
-            {[{ t: "Firmware Engineer", f: true, m: "A. Singh" }, { t: "ML Engineer", f: true, m: "P. Mehta" }, { t: "Backend Dev", f: false }].map((r, i) => (
-              <div key={i} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 0", borderBottom: `1px solid ${C.rule}` }}>
-                <div style={{ width: 7, height: 7, flexShrink: 0, background: r.f ? C.ink : "transparent", border: r.f ? "none" : `1px solid ${C.rule}` }} />
-                <M style={{ fontSize: 12, flex: 1, color: r.f ? C.muted : C.ink, textDecoration: r.f ? "line-through" : "none" }}>{r.t}</M>
-                {r.f ? <M style={{ fontSize: 11, color: C.muted }}>→ {r.m}</M> : <span style={{ fontSize: 9, fontFamily: "'IBM Plex Mono',monospace", border: `1px solid ${C.ink}`, padding: "2px 9px" }}>OPEN</span>}
-              </div>
-            ))}
+            <p style={{ fontSize: 12, color: C.muted, lineHeight: 1.6 }}>
+              Projects list open roles with required skills. When you apply, founders see your profile and can accept or decline your request.
+            </p>
           </div>
         </div>
       </div>
@@ -544,21 +469,21 @@ function ProfilePage({ profile, onSave, onBack }) {
 
 function MainApp() {
   const [mode, setMode] = useState("BUILD");
-  const [projects, setProjects] = useState(INIT_PROJECTS);
-  const [activities, setActivities] = useState(INIT_ACTIVITIES);
-  const [selectedId, setSelectedId] = useState(1);
+  const [projects, setProjects] = useState([]);
+  const [activities, setActivities] = useState([]);
+  const [selectedId, setSelectedId] = useState(null);
   const [tab, setTab] = useState("ROLES");
   const [showPost, setShowPost] = useState(false);
   const [filter, setFilter] = useState("ALL");
   const [showProfile, setShowProfile] = useState(false);
-  const [profile, setProfile] = useState(INIT_PROFILE);
+  const [profile, setProfile] = useState({ name: "", email: "", discipline: "", year: "", skills: [], interests: [], built: "", terms: [], commitment: "", github: "" });
 
   const items = mode === "BUILD" ? projects : activities;
-  const filtered = filter === "YOURS" ? items.filter(i => i.yours) : items;
-  const sel = items.find(i => i.id === selectedId) || items[0];
+  const filtered = filter === "YOURS" ? items.filter(i => i.yours) : filter === "ALL" ? items : items.filter(i => !i.yours);
+  const sel = items.find(i => i.id === selectedId) || (items.length > 0 ? items[0] : null);
   const openRoles = sel?.roles?.filter(r => !r.filled) || [];
   const filledRoles = sel?.roles?.filter(r => r.filled) || [];
-  const switchMode = m => { setMode(m); setSelectedId(m === "BUILD" ? 1 : 4); setTab(m === "BUILD" ? "ROLES" : "SPOTS"); setFilter("ALL"); };
+  const switchMode = m => { setMode(m); setSelectedId(items.length > 0 ? items[0]?.id : null); setTab(m === "BUILD" ? "ROLES" : "SPOTS"); setFilter("ALL"); };
   const handlePost = item => { if (mode === "BUILD") { setProjects(p => [...p, item]); setSelectedId(item.id); setTab("ROLES"); } else { setActivities(a => [...a, item]); setSelectedId(item.id); setTab("SPOTS"); } };
 
   if (showProfile) return <ProfilePage profile={profile} onSave={p => { setProfile(p); }} onBack={() => setShowProfile(false)} />;
@@ -578,7 +503,7 @@ function MainApp() {
           <button key={m} onClick={() => switchMode(m)} style={{ padding: "0 22px", display: "flex", alignItems: "center", cursor: "pointer", fontSize: 11, letterSpacing: "0.1em", borderBottom: mode === m ? `2px solid ${C.lime}` : "2px solid transparent", color: mode === m ? C.ink : C.muted, background: "transparent", border: "none", borderBottom: mode === m ? `2px solid ${C.lime}` : "2px solid transparent", transition: "color 0.12s", userSelect: "none", paddingLeft: 22, paddingRight: 22 }}>{m} MODE</button>
         ))}
         <div className="topbar-meta" style={{ marginLeft: "auto", display: "flex", borderLeft: `1px solid ${C.rule}` }}>
-          {[["STREAM", profile.discipline + " " + profile.year], ["TERM", "W26"]].map(([l, v]) => (
+          {[["STREAM", (profile.discipline || "") + " " + (profile.year || "")], ["TERM", profile.terms?.[0] || ""]].filter(([_, v]) => v).map(([l, v]) => (
             <div key={l} style={{ padding: "0 18px", borderRight: `1px solid ${C.rule}`, display: "flex", flexDirection: "column", justifyContent: "center" }}>
               <div style={{ fontSize: 8, color: C.muted, letterSpacing: "0.12em", marginBottom: 2 }}>{l}</div>
               <div style={{ fontSize: 12, color: C.body }}>{v}</div>
@@ -587,7 +512,7 @@ function MainApp() {
           {/* Profile avatar — clickable */}
           <button onClick={() => setShowProfile(true)} style={{ padding: "0 18px", display: "flex", alignItems: "center", gap: 10, background: "transparent", border: "none", cursor: "pointer", borderLeft: `1px solid ${C.rule}` }}>
             <div style={{ width: 32, height: 32, border: `1px solid ${C.rule}`, background: C.surface, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 15 }}>🧑‍💻</div>
-            <M style={{ fontSize: 11, color: C.body }}>{profile.name.split(" ")[0]}</M>
+            <M style={{ fontSize: 11, color: C.body }}>{profile.name ? profile.name.split(" ")[0] : "Profile"}</M>
           </button>
         </div>
       </div>
@@ -603,7 +528,7 @@ function MainApp() {
               <M style={{ fontSize: 10, color: C.lime, fontWeight: 600 }}>{filtered.length} FOUND</M>
             </div>
             <div style={{ display: "flex", gap: 6, marginBottom: 10 }}>
-              {["ALL", "YOURS"].map(f => (
+              {["ALL", "YOURS", "AVAILABLE"].map(f => (
                 <button key={f} onClick={() => setFilter(f)} style={{ flex: 1, padding: "6px", fontSize: 10, letterSpacing: "0.08em", border: `1px solid ${C.rule}`, background: filter === f ? C.ink : "transparent", color: filter === f ? C.bg : C.muted, cursor: "pointer", transition: "all 0.1s" }}>{f}</button>
               ))}
             </div>
@@ -747,20 +672,22 @@ function MainApp() {
                       <div key={x.l} style={{ display: "flex", alignItems: "center", gap: 8 }}><div style={{ width: 10, height: 10, background: x.c }} /><M style={{ fontSize: 11, color: C.body }}>{x.l}</M></div>
                     ))}
                   </div>
-                  {[{ label: "YOU", terms: YOU_TERMS, you: true }, { label: "FOUNDER", terms: sel.terms?.founder || YOU_TERMS }, ...(filledRoles.map((r, i) => ({ label: r.member.toUpperCase(), terms: ALL_TERMS.filter((_, j) => j % 2 === i % 2) })))].map((p, pi) => (
+                  {[{ label: "YOU", terms: profile.terms || [], you: true }, { label: "FOUNDER", terms: sel.terms?.founder || [] }, ...(filledRoles.map((r, i) => ({ label: (r.member || "MEMBER").toUpperCase(), terms: sel.terms?.founder || [] })))].map((p, pi) => (
                     <div key={pi} style={{ display: "flex", alignItems: "center", gap: 20, padding: "12px 0", borderBottom: `1px solid ${C.rule}` }}>
                       <M style={{ width: 80, fontSize: 11, color: p.you ? C.lime : C.body, fontWeight: p.you ? "600" : "400" }}>{p.label}</M>
                       <div style={{ display: "flex", gap: 8, alignItems: "flex-end" }}>
                         {ALL_TERMS.map(t => {
-                          const active = p.terms.includes(t); const overlap = active && YOU_TERMS.includes(t) && (sel.terms?.overlap || YOU_TERMS).includes(t);
+                          const active = p.terms.includes(t); const overlap = active && (profile.terms || []).includes(t) && (sel.terms?.overlap || []).includes(t);
                           return <div key={t} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4 }}><div style={{ width: 10, height: overlap ? 24 : active ? 16 : 8, background: overlap ? C.lime : active ? C.ink : C.rule, transition: "all 0.2s", boxShadow: overlap ? `0 2px 6px ${C.lime}66` : "none" }} /><M style={{ fontSize: 8, color: overlap ? C.limeDark : active ? C.body : C.muted }}>{t}</M></div>;
                         })}
                       </div>
                     </div>
                   ))}
-                  <div style={{ marginTop: 20, padding: "13px 18px", border: `1px solid ${C.lime}66`, background: C.limeLight }}>
-                    <M style={{ fontSize: 12, color: C.limeDark }}>✓ Full team overlaps: {(sel.terms?.overlap || []).join("  ·  ")}</M>
-                  </div>
+                  {sel.terms?.overlap && sel.terms.overlap.length > 0 && (
+                    <div style={{ marginTop: 20, padding: "13px 18px", border: `1px solid ${C.lime}66`, background: C.limeLight }}>
+                      <M style={{ fontSize: 12, color: C.limeDark }}>✓ Full team overlaps: {sel.terms.overlap.join("  ·  ")}</M>
+                    </div>
+                  )}
                 </div>
               )}
 
