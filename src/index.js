@@ -7,6 +7,41 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
+// Helper function to parse JSON fields from database
+const parseJsonFields = (obj) => {
+  if (!obj) return obj;
+  const parsed = { ...obj };
+  if (parsed.skills && typeof parsed.skills === "string") {
+    try {
+      parsed.skills = JSON.parse(parsed.skills);
+    } catch {
+      parsed.skills = [];
+    }
+  }
+  if (parsed.interests && typeof parsed.interests === "string") {
+    try {
+      parsed.interests = JSON.parse(parsed.interests);
+    } catch {
+      parsed.interests = [];
+    }
+  }
+  if (parsed.terms && typeof parsed.terms === "string") {
+    try {
+      parsed.terms = JSON.parse(parsed.terms);
+    } catch {
+      parsed.terms = [];
+    }
+  }
+  if (parsed.skills_needed && typeof parsed.skills_needed === "string") {
+    try {
+      parsed.skills_needed = JSON.parse(parsed.skills_needed);
+    } catch {
+      parsed.skills_needed = [];
+    }
+  }
+  return parsed;
+};
+
 app.get("/", (req, res) => {
   res.json({ message: "uw-plork API is running!" });
 });
@@ -73,6 +108,12 @@ app.post("/users", async (req, res) => {
       return res.status(400).json({ error: "Email and password are required" });
     }
 
+    if (password.length < 6) {
+      return res
+        .status(400)
+        .json({ error: "Password must be at least 6 characters" });
+    }
+
     // Hash password
     const hashedPassword = await bcrypt.hash(password, 10);
 
@@ -109,13 +150,18 @@ app.get("/users", async (req, res) => {
 
 // Get user by ID
 app.get("/users/:id", async (req, res) => {
-  const [users] = await db.execute("SELECT * FROM users WHERE id = ?", [
-    req.params.id,
-  ]);
-  if (users.length === 0) {
-    return res.status(404).json({ error: "User not found" });
+  try {
+    const [users] = await db.execute("SELECT * FROM users WHERE id = ?", [
+      req.params.id,
+    ]);
+    if (users.length === 0) {
+      return res.status(404).json({ error: "User not found" });
+    }
+    res.json(parseJsonFields(users[0]));
+  } catch (error) {
+    console.error("Error fetching user:", error);
+    res.status(500).json({ error: "Failed to fetch user" });
   }
-  res.json(users[0]);
 });
 
 // Update user
@@ -170,7 +216,7 @@ app.put("/users/:id", async (req, res) => {
       "SELECT id, name, email, discipline, year, skills, interests, commitment, github, created_at FROM users WHERE id = ?",
       [req.params.id],
     );
-    res.json(users[0]);
+    res.json(parseJsonFields(users[0]));
   } catch (error) {
     console.error("Error updating user:", error);
     res.status(500).json({ error: "Failed to update user" });
@@ -181,29 +227,58 @@ app.put("/users/:id", async (req, res) => {
 
 // Create a post
 app.post("/posts", async (req, res) => {
-  const {
-    poster_id,
-    title,
-    description,
-    skills_needed,
-    commitment,
-    spots,
-    deadline,
-  } = req.body;
-  await db.execute(
-    `INSERT INTO posts (poster_id, title, description, skills_needed, commitment, spots, deadline)
-    VALUES (?, ?, ?, ?, ?, ?, ?)`,
-    [
+  try {
+    const {
       poster_id,
       title,
       description,
-      JSON.stringify(skills_needed),
+      skills_needed,
       commitment,
       spots,
       deadline,
-    ],
-  );
-  res.json({ message: "Post created!" });
+    } = req.body;
+
+    if (!poster_id || !title) {
+      return res
+        .status(400)
+        .json({ error: "poster_id and title are required" });
+    }
+
+    const [result] = await db.execute(
+      `INSERT INTO posts (poster_id, title, description, skills_needed, commitment, spots, deadline)
+      VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      [
+        poster_id,
+        title,
+        description || "",
+        JSON.stringify(skills_needed || []),
+        commitment || null,
+        spots || 1,
+        deadline || null,
+      ],
+    );
+
+    // Return the created post with its ID
+    const [posts] = await db.execute(
+      `SELECT p.*, u.name as poster_name, u.discipline, u.year
+      FROM posts p
+      JOIN users u ON p.poster_id = u.id
+      WHERE p.id = ?`,
+      [result.insertId],
+    );
+
+    const post = posts[0] || {
+      id: result.insertId,
+      title: title,
+      description: description,
+    };
+    res.json(parseJsonFields(post));
+  } catch (error) {
+    console.error("Error creating post:", error);
+    res
+      .status(500)
+      .json({ error: "Failed to create post", details: error.message });
+  }
 });
 
 // Get all posts
@@ -217,11 +292,14 @@ app.get("/posts", async (req, res) => {
       ORDER BY p.created_at DESC
     `);
 
-    // Add 'yours' flag if userId is provided
-    const postsWithOwnership = posts.map((post) => ({
-      ...post,
-      yours: userId ? post.poster_id === parseInt(userId) : false,
-    }));
+    // Add 'yours' flag if userId is provided and parse JSON fields
+    const postsWithOwnership = posts.map((post) => {
+      const parsed = parseJsonFields(post);
+      return {
+        ...parsed,
+        yours: userId ? post.poster_id === parseInt(userId) : false,
+      };
+    });
 
     res.json(postsWithOwnership);
   } catch (error) {
@@ -243,8 +321,8 @@ app.get("/posts/:id", async (req, res) => {
     if (posts.length === 0) {
       return res.status(404).json({ error: "Post not found" });
     }
-    const post = posts[0];
-    post.yours = userId ? post.poster_id === parseInt(userId) : false;
+    const post = parseJsonFields(posts[0]);
+    post.yours = userId ? posts[0].poster_id === parseInt(userId) : false;
     res.json(post);
   } catch (error) {
     console.error("Error fetching post:", error);

@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { api } from "./api";
 
 const ALL_TERMS = ["W26", "S26", "F26", "W27", "S27", "F27", "W27"];
 const SKILL_OPTIONS = ["React", "TypeScript", "Python", "ML/AI", "Embedded C", "PCB Design", "CAD", "Rust", "Node.js", "FPGA", "Computer Vision", "iOS", "Java", "C++", "Figma", "Verilog", "Swift", "Docker"];
@@ -156,7 +157,7 @@ function Landing({ onLogin, onSignup }) {
           <div style={{ borderBottom: `1px solid ${C.rule}`, padding: "48px 48px 36px" }}>
             <SectionLabel>TWO MODES</SectionLabel>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr" }}>
-              {[{ m: "BUILD", desc: "Side projects & engineering teams. Role slots, skill matching, Velocity track.", dark: true }, { m: "CREW", desc: "Sports, music, social. Find people on campus the same terms as you.", dark: false }].map((x, i) => (
+              {[{ m: "BUILD", desc: "Side projects & engineering teams. Role slots and skill matching.", dark: true }, { m: "CREW", desc: "Sports, music, social. Find people on campus the same terms as you.", dark: false }].map((x, i) => (
                 <div key={x.m} style={{ padding: "20px 22px", background: x.dark ? C.ink : C.surface, borderRight: i === 0 ? `1px solid ${C.rule}` : "none" }}>
                   <D size={22} color={x.dark ? C.lime : C.muted} style={{ display: "block", marginBottom: 10 }}>{x.m}</D>
                   <p style={{ fontSize: 12, color: x.dark ? "#7a9a6a" : C.muted, lineHeight: 1.65 }}>{x.desc}</p>
@@ -186,7 +187,27 @@ function Landing({ onLogin, onSignup }) {
 }
 
 function Login({ onBack, onSuccess }) {
-  const [email, setEmail] = useState(""); const [pass, setPass] = useState("");
+  const [email, setEmail] = useState("");
+  const [pass, setPass] = useState("");
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  const handleLogin = async () => {
+    if (!email || !pass) {
+      setError("Please enter both email and password");
+      return;
+    }
+    setLoading(true);
+    setError("");
+    try {
+      const result = await api.login(email, pass);
+      onSuccess(result.userId, result.user);
+    } catch (err) {
+      setError(err.message || "Invalid email or password");
+    }
+    setLoading(false);
+  };
+
   return (
     <div style={{ minHeight: "100vh", background: C.bg, fontFamily: "'IBM Plex Mono',monospace" }}>
       <style>{BASE_CSS}</style>
@@ -198,9 +219,10 @@ function Login({ onBack, onSuccess }) {
         <div style={{ width: "100%", maxWidth: 420, border: `1px solid ${C.rule}`, padding: "52px 48px" }}>
           <D size={40} style={{ display: "block", marginBottom: 6 }}>LOG IN</D>
           <p style={{ fontSize: 12, color: C.muted, marginBottom: 40 }}>Welcome back to Plork.</p>
+          {error && <div style={{ padding: "10px 14px", background: C.redLight, border: `1px solid ${C.red}44`, marginBottom: 20 }}><M style={{ fontSize: 12, color: C.red }}>{error}</M></div>}
           <FieldInput label="UW EMAIL" value={email} onChange={setEmail} placeholder="userid@uwaterloo.ca" type="email" />
           <FieldInput label="PASSWORD" value={pass} onChange={setPass} placeholder="••••••••" type="password" />
-          <button onClick={onSuccess} style={{ width: "100%", padding: "13px", fontSize: 12, letterSpacing: "0.1em", fontWeight: 700, background: C.ink, color: C.bg, border: "none", cursor: "pointer", marginTop: 8 }}>LOG IN →</button>
+          <button onClick={handleLogin} disabled={loading} style={{ width: "100%", padding: "13px", fontSize: 12, letterSpacing: "0.1em", fontWeight: 700, background: loading ? C.rule : C.ink, color: C.bg, border: "none", cursor: loading ? "default" : "pointer", marginTop: 8, opacity: loading ? 0.6 : 1 }}>{loading ? "LOGGING IN..." : "LOG IN →"}</button>
           <div style={{ marginTop: 24, paddingTop: 20, borderTop: `1px solid ${C.rule}`, textAlign: "center" }}>
             <span style={{ fontSize: 11, color: C.muted }}>No account? </span>
             <span onClick={onBack} style={{ fontSize: 11, color: C.ink, cursor: "pointer", textDecoration: "underline" }}>Sign up</span>
@@ -214,10 +236,43 @@ function Login({ onBack, onSuccess }) {
 const STEPS = ["ACCOUNT", "STREAM", "SKILLS", "SCHEDULE", "DONE"];
 function Onboarding({ onComplete }) {
   const [step, setStep] = useState(0);
-  const [form, setForm] = useState({ name: "", email: "", password: "", discipline: "", year: "", skills: [], interests: [], built: "", terms: [], commitment: "" });
+  const [form, setForm] = useState({ name: "", email: "", password: "", confirmPassword: "", discipline: "", year: "", skills: [], interests: [], built: "", terms: [], commitment: "" });
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [customSkill, setCustomSkill] = useState("");
+  const [customInterest, setCustomInterest] = useState("");
   const u = (k, v) => setForm(f => ({ ...f, [k]: v }));
   const tog = (k, v) => setForm(f => ({ ...f, [k]: f[k].includes(v) ? f[k].filter(x => x !== v) : [...f[k], v] }));
-  const canNext = () => { if (step === 0) return form.name && form.email && form.password; if (step === 1) return form.discipline && form.year; if (step === 2) return form.skills.length > 0; if (step === 3) return form.terms.length > 0; return true; };
+  const addCustomSkill = () => {
+    if (customSkill.trim() && !form.skills.includes(customSkill.trim())) {
+      tog("skills", customSkill.trim());
+      setCustomSkill("");
+    }
+  };
+  const addCustomInterest = () => {
+    if (customInterest.trim() && !form.interests.includes(customInterest.trim())) {
+      tog("interests", customInterest.trim());
+      setCustomInterest("");
+    }
+  };
+  const canNext = () => {
+    if (step === 0) return form.name && form.email && form.password && form.password.length >= 6 && form.password === form.confirmPassword;
+    if (step === 1) return form.discipline && form.year;
+    if (step === 2) return form.skills.length > 0;
+    if (step === 3) return form.terms.length > 0;
+    return true;
+  };
+  const handleComplete = async () => {
+    setLoading(true);
+    setError("");
+    try {
+      const result = await api.register(form);
+      onComplete(result.userId, result.user);
+    } catch (err) {
+      setError(err.message || "Registration failed");
+      setLoading(false);
+    }
+  };
   return (
     <div style={{ minHeight: "100vh", background: C.bg, fontFamily: "'IBM Plex Mono',monospace", display: "flex", flexDirection: "column" }}>
       <style>{BASE_CSS}</style>
@@ -235,11 +290,41 @@ function Onboarding({ onComplete }) {
       </nav>
       <div style={{ flex: 1, display: "flex", justifyContent: "center", padding: "52px 40px", overflowY: "auto" }}>
         <div className="fade-up" key={step} style={{ width: "100%", maxWidth: 580 }}>
-          {step === 0 && <><D size={44} style={{ display: "block", marginBottom: 6 }}>CREATE ACCOUNT</D><p style={{ fontSize: 13, color: C.muted, marginBottom: 40 }}>Sign up with your UW email.</p><FieldInput label="FULL NAME" value={form.name} onChange={v => u("name", v)} placeholder="Jamie Kim" /><FieldInput label="UW EMAIL" value={form.email} onChange={v => u("email", v)} placeholder="jkim@uwaterloo.ca" type="email" /><FieldInput label="PASSWORD" value={form.password} onChange={v => u("password", v)} placeholder="••••••••" type="password" /></>}
+          {step === 0 && <>
+            <D size={44} style={{ display: "block", marginBottom: 6 }}>CREATE ACCOUNT</D>
+            <p style={{ fontSize: 13, color: C.muted, marginBottom: 40 }}>Sign up with your UW email.</p>
+            {error && <div style={{ padding: "10px 14px", background: C.redLight, border: `1px solid ${C.red}44`, marginBottom: 20 }}><M style={{ fontSize: 12, color: C.red }}>{error}</M></div>}
+            <FieldInput label="FULL NAME" value={form.name} onChange={v => u("name", v)} placeholder="Jamie Kim" />
+            <FieldInput label="UW EMAIL" value={form.email} onChange={v => u("email", v)} placeholder="jkim@uwaterloo.ca" type="email" />
+            <FieldInput label="PASSWORD" value={form.password} onChange={v => u("password", v)} placeholder="••••••••" type="password" hint={form.password && form.password.length < 6 ? "At least 6 characters" : ""} />
+            <FieldInput label="CONFIRM PASSWORD" value={form.confirmPassword || ""} onChange={v => u("confirmPassword", v)} placeholder="••••••••" type="password" hint={form.confirmPassword && form.password !== form.confirmPassword ? "Passwords don't match" : ""} />
+          </>}
           {step === 1 && <><D size={44} style={{ display: "block", marginBottom: 6 }}>YOUR STREAM</D><p style={{ fontSize: 13, color: C.muted, marginBottom: 40 }}>Helps Plork understand your schedule.</p><div style={{ marginBottom: 28 }}><SectionLabel>DISCIPLINE</SectionLabel><div style={{ display: "flex", flexWrap: "wrap", gap: 7 }}>{DISCIPLINE_OPTIONS.map(d => <Chip key={d} active={form.discipline === d} onClick={() => u("discipline", d)}>{d}</Chip>)}</div></div><div><SectionLabel>CURRENT TERM</SectionLabel><div style={{ display: "flex", flexWrap: "wrap", gap: 7 }}>{YEAR_OPTIONS.map(y => <Chip key={y} active={form.year === y} onClick={() => u("year", y)}>{y}</Chip>)}</div></div></>}
-          {step === 2 && <><D size={44} style={{ display: "block", marginBottom: 6 }}>YOUR SKILLS</D><p style={{ fontSize: 13, color: C.muted, marginBottom: 40 }}>Select everything you're comfortable with.</p><div style={{ marginBottom: 28 }}><SectionLabel>TECHNICAL SKILLS</SectionLabel><div style={{ display: "flex", flexWrap: "wrap", gap: 7 }}>{SKILL_OPTIONS.map(s => <Chip key={s} active={form.skills.includes(s)} onClick={() => tog("skills", s)}>{s}</Chip>)}</div></div><FieldTextarea label="WHAT I'VE BUILT" value={form.built} onChange={v => u("built", v)} placeholder="Built a lane-detection model for Midnight Sun." hint="1–2 lines" /><div><SectionLabel>INTERESTS — for Crew Mode</SectionLabel><div style={{ display: "flex", flexWrap: "wrap", gap: 7 }}>{INTEREST_OPTIONS.map(s => <Chip key={s} active={form.interests.includes(s)} onClick={() => tog("interests", s)}>{s}</Chip>)}</div></div></>}
+          {step === 2 && <>
+            <D size={44} style={{ display: "block", marginBottom: 6 }}>YOUR SKILLS</D>
+            <p style={{ fontSize: 13, color: C.muted, marginBottom: 40 }}>Select everything you're comfortable with.</p>
+            <div style={{ marginBottom: 28 }}>
+              <SectionLabel>TECHNICAL SKILLS</SectionLabel>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 7, marginBottom: 12 }}>{SKILL_OPTIONS.map(s => <Chip key={s} active={form.skills.includes(s)} onClick={() => tog("skills", s)}>{s}</Chip>)}</div>
+              <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
+                <input value={customSkill} onChange={e => setCustomSkill(e.target.value)} onKeyPress={e => e.key === "Enter" && addCustomSkill()} placeholder="Add custom skill..." style={{ flex: 1, padding: "8px 12px", fontSize: 12, color: C.ink, background: C.surface, border: `1px solid ${C.rule}`, outline: "none" }} onFocus={e => e.target.style.borderColor = C.lime} onBlur={e => e.target.style.borderColor = C.rule} />
+                <button onClick={addCustomSkill} style={{ padding: "8px 16px", fontSize: 11, background: C.ink, color: C.bg, border: "none", cursor: "pointer" }}>ADD</button>
+              </div>
+              {form.skills.length > 0 && <div style={{ display: "flex", flexWrap: "wrap", gap: 7, marginTop: 12 }}>{form.skills.filter(s => !SKILL_OPTIONS.includes(s)).map(s => <Chip key={s} active={true} onClick={() => tog("skills", s)}>{s}</Chip>)}</div>}
+            </div>
+            <FieldTextarea label="WHAT I'VE BUILT" value={form.built} onChange={v => u("built", v)} placeholder="Built a lane-detection model for Midnight Sun." hint="1–2 lines" />
+            <div>
+              <SectionLabel>INTERESTS — for Crew Mode</SectionLabel>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 7, marginBottom: 12 }}>{INTEREST_OPTIONS.map(s => <Chip key={s} active={form.interests.includes(s)} onClick={() => tog("interests", s)}>{s}</Chip>)}</div>
+              <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
+                <input value={customInterest} onChange={e => setCustomInterest(e.target.value)} onKeyPress={e => e.key === "Enter" && addCustomInterest()} placeholder="Add custom interest..." style={{ flex: 1, padding: "8px 12px", fontSize: 12, color: C.ink, background: C.surface, border: `1px solid ${C.rule}`, outline: "none" }} onFocus={e => e.target.style.borderColor = C.lime} onBlur={e => e.target.style.borderColor = C.rule} />
+                <button onClick={addCustomInterest} style={{ padding: "8px 16px", fontSize: 11, background: C.ink, color: C.bg, border: "none", cursor: "pointer" }}>ADD</button>
+              </div>
+              {form.interests.length > 0 && <div style={{ display: "flex", flexWrap: "wrap", gap: 7, marginTop: 12 }}>{form.interests.filter(s => !INTEREST_OPTIONS.includes(s)).map(s => <Chip key={s} active={true} onClick={() => tog("interests", s)}>{s}</Chip>)}</div>}
+            </div>
+          </>}
           {step === 3 && <><D size={44} style={{ display: "block", marginBottom: 6 }}>YOUR SCHEDULE</D><p style={{ fontSize: 13, color: C.muted, marginBottom: 40 }}>Which terms are you on campus?</p><div style={{ marginBottom: 32 }}><SectionLabel>ON-CAMPUS TERMS</SectionLabel><div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>{ALL_TERMS.map(t => <div key={t} onClick={() => tog("terms", t)} style={{ padding: "14px 18px", border: form.terms.includes(t) ? `2px solid ${C.ink}` : `1px solid ${C.rule}`, background: form.terms.includes(t) ? C.ink : C.surface, cursor: "pointer", textAlign: "center", transition: "all 0.12s", minWidth: 60 }}><D size={15} color={form.terms.includes(t) ? C.lime : C.muted} style={{ display: "block" }}>{t}</D></div>)}</div></div><SectionLabel>COMMITMENT LEVEL</SectionLabel>{COMMITMENTS.map(c => <div key={c} onClick={() => u("commitment", c)} style={{ padding: "13px 18px", border: form.commitment === c ? `2px solid ${C.ink}` : `1px solid ${C.rule}`, background: form.commitment === c ? C.ink : C.surface, cursor: "pointer", marginBottom: 8, display: "flex", gap: 16, alignItems: "center", transition: "all 0.12s" }}><D size={15} color={form.commitment === c ? C.lime : C.muted} style={{ flexShrink: 0 }}>{c}</D><span style={{ fontSize: 12, color: form.commitment === c ? "#7a9a6a" : C.muted, lineHeight: 1.5 }}>{c === "CASUAL" ? "A few hours a week" : c === "SERIOUS" ? "Consistent effort, aiming to ship" : "Startup-track — applying to Velocity"}</span></div>)}</>}
-          {step === 4 && <div style={{ textAlign: "center", paddingTop: 40 }}><div style={{ width: 64, height: 64, background: C.lime, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 28, margin: "0 auto 24px" }}>✓</div><D size={48} style={{ display: "block", marginBottom: 14 }}>YOU'RE IN.</D><p style={{ fontSize: 14, color: C.body, lineHeight: 1.8, marginBottom: 40, maxWidth: 380, margin: "0 auto 40px" }}>Profile created for <strong>{form.name || "you"}</strong>.<br />{form.discipline} {form.year}{form.skills.length > 0 ? " · " + form.skills.slice(0, 3).join(", ") : ""}</p><button onClick={onComplete} style={{ fontSize: 13, letterSpacing: "0.12em", fontWeight: 700, padding: "14px 44px", background: C.ink, color: C.bg, border: "none", cursor: "pointer" }}>ENTER PLORK →</button></div>}
+          {step === 4 && <div style={{ textAlign: "center", paddingTop: 40 }}><div style={{ width: 64, height: 64, background: C.lime, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 28, margin: "0 auto 24px" }}>✓</div><D size={48} style={{ display: "block", marginBottom: 14 }}>YOU'RE IN.</D><p style={{ fontSize: 14, color: C.body, lineHeight: 1.8, marginBottom: 40, maxWidth: 380, margin: "0 auto 40px" }}>Profile created for <strong>{form.name || "you"}</strong>.<br />{form.discipline} {form.year}{form.skills.length > 0 ? " · " + form.skills.slice(0, 3).join(", ") : ""}</p>{error && <div style={{ padding: "10px 14px", background: C.redLight, border: `1px solid ${C.red}44`, marginBottom: 20, maxWidth: 380, margin: "0 auto 20px" }}><M style={{ fontSize: 12, color: C.red }}>{error}</M></div>}<button onClick={handleComplete} disabled={loading} style={{ fontSize: 13, letterSpacing: "0.12em", fontWeight: 700, padding: "14px 44px", background: loading ? C.rule : C.ink, color: C.bg, border: "none", cursor: loading ? "default" : "pointer", opacity: loading ? 0.6 : 1 }}>{loading ? "CREATING..." : "ENTER PLORK →"}</button></div>}
           {step < 4 && <div style={{ display: "flex", justifyContent: "space-between", marginTop: 48, paddingTop: 24, borderTop: `1px solid ${C.rule}` }}><button onClick={() => setStep(s => Math.max(0, s - 1))} disabled={step === 0} style={{ fontSize: 11, padding: "10px 24px", border: `1px solid ${C.rule}`, background: "transparent", color: step === 0 ? C.rule : C.body, cursor: step === 0 ? "default" : "pointer" }}>← BACK</button><button onClick={() => setStep(s => Math.min(STEPS.length - 1, s + 1))} disabled={!canNext()} style={{ fontSize: 11, letterSpacing: "0.1em", padding: "10px 28px", border: "none", background: canNext() ? C.ink : C.rule, color: canNext() ? C.bg : C.muted, cursor: canNext() ? "pointer" : "default", fontWeight: 700 }}>NEXT →</button></div>}
         </div>
       </div>
@@ -247,20 +332,36 @@ function Onboarding({ onComplete }) {
   );
 }
 
-function PostModal({ mode, onClose, onSubmit }) {
+function PostModal({ mode, onClose, onSubmit, userId }) {
   const isBuild = mode === "BUILD";
   const [step, setStep] = useState(0);
-  const [form, setForm] = useState({ name: "", tagline: "", category: "", stage: "", commitment: "", type: "", velocity: false, spots: 2, roles: [{ title: "", skills: [] }], terms: [] });
+  const [form, setForm] = useState({ name: "", tagline: "", category: "", stage: "", commitment: "", type: "", spots: 2, roles: [{ title: "", skills: [] }], terms: [] });
+  const [customSkills, setCustomSkills] = useState({});
+  const [loading, setLoading] = useState(false);
   const u = (k, v) => setForm(f => ({ ...f, [k]: v }));
   const addRole = () => setForm(f => ({ ...f, roles: [...f.roles, { title: "", skills: [] }] }));
   const removeRole = i => setForm(f => ({ ...f, roles: f.roles.filter((_, j) => j !== i) }));
   const updateRole = (i, k, v) => setForm(f => ({ ...f, roles: f.roles.map((r, j) => j === i ? { ...r, [k]: v } : r) }));
   const toggleRoleSkill = (i, s) => setForm(f => ({ ...f, roles: f.roles.map((r, j) => j === i ? { ...r, skills: r.skills.includes(s) ? r.skills.filter(x => x !== s) : [...r.skills, s] } : r) }));
+  const addCustomRoleSkill = (roleIndex, skill) => {
+    if (skill.trim() && !form.roles[roleIndex].skills.includes(skill.trim())) {
+      toggleRoleSkill(roleIndex, skill.trim());
+      setCustomSkills({ ...customSkills, [roleIndex]: "" });
+    }
+  };
   const toggleTerm = t => setForm(f => ({ ...f, terms: f.terms.includes(t) ? f.terms.filter(x => x !== t) : [...f.terms, t] }));
   const canNextStep = () => { if (step === 0) return form.name && form.tagline && form.category && (isBuild ? (form.stage && form.commitment) : form.type); if (step === 1) return isBuild ? form.roles.every(r => r.title) : true; return form.terms.length > 0; };
-  const handleSubmit = () => {
-    onSubmit({ id: Date.now(), name: form.name.toUpperCase(), tagline: form.tagline, category: form.category, stage: isBuild ? form.stage : undefined, type: !isBuild ? form.type : undefined, commitment: isBuild ? form.commitment : undefined, match: Math.floor(Math.random() * 20) + 70, velocity: form.velocity, yours: true, roles: isBuild ? form.roles.map(r => ({ ...r, filled: false })) : undefined, spots: !isBuild ? form.spots : undefined, tags: !isBuild ? [form.category] : undefined, terms: { founder: form.terms, overlap: form.terms } });
-    onClose();
+  const handleSubmit = async () => {
+    if (!userId) { alert("Please log in first"); return; }
+    setLoading(true);
+    try {
+      const created = await api.createProject({ name: form.name.toUpperCase(), tagline: form.tagline, category: form.category, stage: isBuild ? form.stage : undefined, type: !isBuild ? form.type : undefined, commitment: isBuild ? form.commitment : undefined, roles: isBuild ? form.roles.map(r => ({ ...r, filled: false })) : undefined, spots: !isBuild ? form.spots : undefined, tags: !isBuild ? [form.category] : undefined, terms: { founder: form.terms, overlap: form.terms } }, userId);
+      onSubmit(created);
+      onClose();
+    } catch (err) {
+      alert("Failed to create post: " + (err.message || "Unknown error"));
+    }
+    setLoading(false);
   };
   return (
     <div style={{ position: "fixed", inset: 0, background: "rgba(21,21,13,0.5)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 100, padding: 20 }}>
@@ -275,11 +376,11 @@ function PostModal({ mode, onClose, onSubmit }) {
             <FieldInput label="NAME" value={form.name} onChange={v => u("name", v)} placeholder={isBuild ? "e.g. Solar Rover" : "e.g. Volleyball"} />
             <FieldTextarea label="ONE-LINE PITCH" value={form.tagline} onChange={v => u("tagline", v)} rows={2} placeholder="What are you building and why?" hint="120 chars" />
             <div style={{ marginBottom: 20 }}><SectionLabel>CATEGORY</SectionLabel><div style={{ display: "flex", flexWrap: "wrap", gap: 7 }}>{(isBuild ? CATEGORIES_BUILD : CATEGORIES_CREW).map(c => <Chip key={c} active={form.category === c} onClick={() => u("category", c)}>{c}</Chip>)}</div></div>
-            {isBuild && <><div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 20 }}><div><SectionLabel>STAGE</SectionLabel><div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>{STAGES.map(s => <Chip key={s} small active={form.stage === s} onClick={() => u("stage", s)}>{s}</Chip>)}</div></div><div><SectionLabel>COMMITMENT</SectionLabel><div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>{COMMITMENTS.map(c => <Chip key={c} small active={form.commitment === c} onClick={() => u("commitment", c)}>{c}</Chip>)}</div></div></div><div onClick={() => u("velocity", !form.velocity)} style={{ display: "flex", alignItems: "center", gap: 12, padding: "12px 16px", border: form.velocity ? `1.5px solid ${C.lime}` : `1px solid ${C.rule}`, background: form.velocity ? C.limeLight : C.surface, cursor: "pointer", marginBottom: 20, transition: "all 0.15s" }}><div style={{ width: 18, height: 18, border: `1.5px solid ${form.velocity ? C.limeDark : C.rule}`, background: form.velocity ? C.lime : "transparent", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, flexShrink: 0 }}>{form.velocity ? "✓" : ""}</div><div><M style={{ fontSize: 12, color: C.ink, fontWeight: 600 }}>⚡ Velocity Track</M><M style={{ fontSize: 10, color: C.muted, display: "block" }}>Applying to Velocity or W+Accelerate</M></div></div></>}
+            {isBuild && <><div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 20 }}><div><SectionLabel>STAGE</SectionLabel><div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>{STAGES.map(s => <Chip key={s} small active={form.stage === s} onClick={() => u("stage", s)}>{s}</Chip>)}</div></div><div><SectionLabel>COMMITMENT</SectionLabel><div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>{COMMITMENTS.map(c => <Chip key={c} small active={form.commitment === c} onClick={() => u("commitment", c)}>{c}</Chip>)}</div></div></div></>}
             {!isBuild && <><div style={{ marginBottom: 20 }}><SectionLabel>ACTIVITY TYPE</SectionLabel><div style={{ display: "flex", flexWrap: "wrap", gap: 7 }}>{ACTIVITY_TYPES.map(t => <Chip key={t} active={form.type === t} onClick={() => u("type", t)}>{t}</Chip>)}</div></div><div style={{ marginBottom: 20 }}><SectionLabel>SPOTS NEEDED</SectionLabel><div style={{ display: "flex", alignItems: "center", gap: 12 }}><button onClick={() => u("spots", Math.max(1, form.spots - 1))} style={{ width: 36, height: 36, border: `1px solid ${C.rule}`, background: C.surface, cursor: "pointer", fontSize: 18 }}>−</button><M style={{ fontSize: 20, fontWeight: 600, minWidth: 24, textAlign: "center" }}>{form.spots}</M><button onClick={() => u("spots", Math.min(20, form.spots + 1))} style={{ width: 36, height: 36, border: `1px solid ${C.rule}`, background: C.surface, cursor: "pointer", fontSize: 18 }}>+</button><M style={{ fontSize: 11, color: C.muted }}>spots needed</M></div></div></>}
           </>}
           {step === 1 && <>
-            {isBuild && <>{form.roles.map((role, i) => <div key={i} style={{ border: `1px solid ${C.rule}`, padding: "18px", marginBottom: 14, background: C.surface }}><div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}><M style={{ fontSize: 11, color: C.muted, letterSpacing: "0.1em" }}>ROLE {i + 1}</M>{form.roles.length > 1 && <button onClick={() => removeRole(i)} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 12, color: C.muted }}>✕ remove</button>}</div><input value={role.title} onChange={e => updateRole(i, "title", e.target.value)} placeholder="e.g. Firmware Engineer" style={{ width: "100%", padding: "10px 12px", fontSize: 13, color: C.ink, background: C.bg, border: `1px solid ${C.rule}`, outline: "none", marginBottom: 14 }} onFocus={e => e.target.style.borderColor = C.lime} onBlur={e => e.target.style.borderColor = C.rule} /><SectionLabel>REQUIRED SKILLS</SectionLabel><div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>{SKILL_OPTIONS.map(s => <Chip key={s} small active={role.skills.includes(s)} onClick={() => toggleRoleSkill(i, s)}>{s}</Chip>)}</div></div>)}<button onClick={addRole} style={{ width: "100%", padding: "11px", border: `1px dashed ${C.rule}`, background: "transparent", color: C.muted, cursor: "pointer", fontSize: 11, letterSpacing: "0.08em" }}>+ ADD ANOTHER ROLE</button></>}
+            {isBuild && <>{form.roles.map((role, i) => <div key={i} style={{ border: `1px solid ${C.rule}`, padding: "18px", marginBottom: 14, background: C.surface }}><div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}><M style={{ fontSize: 11, color: C.muted, letterSpacing: "0.1em" }}>ROLE {i + 1}</M>{form.roles.length > 1 && <button onClick={() => removeRole(i)} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 12, color: C.muted }}>✕ remove</button>}</div><input value={role.title} onChange={e => updateRole(i, "title", e.target.value)} placeholder="e.g. Firmware Engineer" style={{ width: "100%", padding: "10px 12px", fontSize: 13, color: C.ink, background: C.bg, border: `1px solid ${C.rule}`, outline: "none", marginBottom: 14 }} onFocus={e => e.target.style.borderColor = C.lime} onBlur={e => e.target.style.borderColor = C.rule} /><SectionLabel>REQUIRED SKILLS</SectionLabel><div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 10 }}>{SKILL_OPTIONS.map(s => <Chip key={s} small active={role.skills.includes(s)} onClick={() => toggleRoleSkill(i, s)}>{s}</Chip>)}</div><div style={{ display: "flex", gap: 8, marginTop: 8 }}><input value={customSkills[i] || ""} onChange={e => setCustomSkills({ ...customSkills, [i]: e.target.value })} onKeyPress={e => e.key === "Enter" && addCustomRoleSkill(i, customSkills[i] || "")} placeholder="Add custom skill..." style={{ flex: 1, padding: "8px 12px", fontSize: 12, color: C.ink, background: C.bg, border: `1px solid ${C.rule}`, outline: "none" }} onFocus={e => e.target.style.borderColor = C.lime} onBlur={e => e.target.style.borderColor = C.rule} /><button onClick={() => addCustomRoleSkill(i, customSkills[i] || "")} style={{ padding: "8px 16px", fontSize: 11, background: C.ink, color: C.bg, border: "none", cursor: "pointer" }}>ADD</button></div><div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 8 }}>{role.skills.filter(s => !SKILL_OPTIONS.includes(s)).map(s => <Chip key={s} small active={true} onClick={() => toggleRoleSkill(i, s)}>{s}</Chip>)}</div></div>)}<button onClick={addRole} style={{ width: "100%", padding: "11px", border: `1px dashed ${C.rule}`, background: "transparent", color: C.muted, cursor: "pointer", fontSize: 11, letterSpacing: "0.08em" }}>+ ADD ANOTHER ROLE</button></>}
             {!isBuild && <div style={{ paddingTop: 20 }}><p style={{ fontSize: 13, color: C.body, marginBottom: 24, lineHeight: 1.6 }}>You're looking for {form.spots} person{form.spots !== 1 ? "s" : ""} to join <strong>{form.name || "your activity"}</strong>.</p><div style={{ padding: "20px", border: `1px solid ${C.rule}`, background: C.surface }}><D size={20} style={{ display: "block", marginBottom: 8 }}>{form.name || "YOUR ACTIVITY"}</D><M style={{ fontSize: 12, color: C.muted, display: "block", marginBottom: 12 }}>{form.tagline || "Your tagline"}</M><div style={{ display: "flex", gap: 8 }}><M style={{ fontSize: 10, background: C.rule, padding: "2px 8px", color: C.body }}>{form.category || "CATEGORY"}</M><M style={{ fontSize: 10, color: C.lime, border: `1px solid ${C.lime}`, padding: "2px 8px" }}>{form.spots} SPOTS OPEN</M></div></div></div>}
           </>}
           {step === 2 && <>
@@ -292,20 +393,46 @@ function PostModal({ mode, onClose, onSubmit }) {
         <div style={{ padding: "20px 28px", borderTop: `1px solid ${C.rule}`, display: "flex", justifyContent: "space-between", flexShrink: 0 }}>
           <button onClick={() => step > 0 ? setStep(s => s - 1) : onClose()} style={{ fontSize: 11, padding: "10px 22px", border: `1px solid ${C.rule}`, background: "transparent", color: C.body, cursor: "pointer" }}>{step === 0 ? "CANCEL" : "← BACK"}</button>
           {step < 2 ? <button onClick={() => canNextStep() && setStep(s => s + 1)} style={{ fontSize: 11, letterSpacing: "0.1em", padding: "10px 28px", border: "none", background: canNextStep() ? C.ink : C.rule, color: canNextStep() ? C.bg : C.muted, cursor: canNextStep() ? "pointer" : "default", fontWeight: 700 }}>NEXT →</button>
-            : <button onClick={handleSubmit} disabled={!canNextStep()} style={{ fontSize: 11, letterSpacing: "0.1em", padding: "10px 28px", border: "none", background: canNextStep() ? C.lime : C.rule, color: canNextStep() ? C.limeInk : C.muted, cursor: canNextStep() ? "pointer" : "default", fontWeight: 700 }}>POST ✓</button>}
+            : <button onClick={handleSubmit} disabled={!canNextStep() || loading} style={{ fontSize: 11, letterSpacing: "0.1em", padding: "10px 28px", border: "none", background: canNextStep() && !loading ? C.lime : C.rule, color: canNextStep() && !loading ? C.limeInk : C.muted, cursor: canNextStep() && !loading ? "pointer" : "default", fontWeight: 700, opacity: loading ? 0.6 : 1 }}>{loading ? "POSTING..." : "POST ✓"}</button>}
         </div>
       </div>
     </div>
   );
 }
 
-function ProfilePage({ profile, onSave, onBack }) {
+function ProfilePage({ profile, onSave, onBack, userId }) {
   const [form, setForm] = useState({ ...profile });
   const [saved, setSaved] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [customSkill, setCustomSkill] = useState("");
+  const [customInterest, setCustomInterest] = useState("");
   const u = (k, v) => setForm(f => ({ ...f, [k]: v }));
   const tog = (k, v) => setForm(f => ({ ...f, [k]: f[k].includes(v) ? f[k].filter(x => x !== v) : [...f[k], v] }));
-
-  const handleSave = () => { onSave(form); setSaved(true); setTimeout(() => setSaved(false), 2000); };
+  const addCustomSkill = () => {
+    if (customSkill.trim() && !form.skills.includes(customSkill.trim())) {
+      tog("skills", customSkill.trim());
+      setCustomSkill("");
+    }
+  };
+  const addCustomInterest = () => {
+    if (customInterest.trim() && !form.interests.includes(customInterest.trim())) {
+      tog("interests", customInterest.trim());
+      setCustomInterest("");
+    }
+  };
+  const handleSave = async () => {
+    if (!userId) { alert("No user ID found"); return; }
+    setLoading(true);
+    try {
+      const updated = await api.updateProfile(userId, form);
+      onSave(updated);
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2000);
+    } catch (err) {
+      alert("Failed to save: " + (err.message || "Unknown error"));
+    }
+    setLoading(false);
+  };
 
   return (
     <div style={{ minHeight: "100vh", background: C.bg, fontFamily: "'IBM Plex Mono',monospace", color: C.ink }}>
@@ -322,7 +449,7 @@ function ProfilePage({ profile, onSave, onBack }) {
         </button>
         <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", padding: "0 24px", borderLeft: `1px solid ${C.rule}`, gap: 12 }}>
           {saved && <M style={{ fontSize: 11, color: C.limeDark }}>✓ Saved</M>}
-          <button onClick={handleSave} style={{ fontSize: 11, letterSpacing: "0.1em", fontWeight: 700, padding: "8px 22px", border: "none", background: C.lime, color: C.limeInk, cursor: "pointer" }}>SAVE CHANGES</button>
+          <button onClick={handleSave} disabled={loading} style={{ fontSize: 11, letterSpacing: "0.1em", fontWeight: 700, padding: "8px 22px", border: "none", background: loading ? C.rule : C.lime, color: C.limeInk, cursor: loading ? "default" : "pointer", opacity: loading ? 0.6 : 1 }}>{loading ? "SAVING..." : "SAVE CHANGES"}</button>
         </div>
       </div>
 
@@ -404,9 +531,14 @@ function ProfilePage({ profile, onSave, onBack }) {
           {/* ─ Skills ─ */}
           <SectionLabel>TECHNICAL SKILLS</SectionLabel>
           <div style={{ marginBottom: 20 }}>
-            <div style={{ display: "flex", flexWrap: "wrap", gap: 7 }}>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 7, marginBottom: 12 }}>
               {SKILL_OPTIONS.map(s => <Chip key={s} active={form.skills.includes(s)} onClick={() => tog("skills", s)}>{s}</Chip>)}
             </div>
+            <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
+              <input value={customSkill} onChange={e => setCustomSkill(e.target.value)} onKeyPress={e => e.key === "Enter" && addCustomSkill()} placeholder="Add custom skill..." style={{ flex: 1, padding: "8px 12px", fontSize: 12, color: C.ink, background: C.surface, border: `1px solid ${C.rule}`, outline: "none" }} onFocus={e => e.target.style.borderColor = C.lime} onBlur={e => e.target.style.borderColor = C.rule} />
+              <button onClick={addCustomSkill} style={{ padding: "8px 16px", fontSize: 11, background: C.ink, color: C.bg, border: "none", cursor: "pointer" }}>ADD</button>
+            </div>
+            {form.skills.filter(s => !SKILL_OPTIONS.includes(s)).length > 0 && <div style={{ display: "flex", flexWrap: "wrap", gap: 7, marginTop: 12 }}>{form.skills.filter(s => !SKILL_OPTIONS.includes(s)).map(s => <Chip key={s} active={true} onClick={() => tog("skills", s)}>{s}</Chip>)}</div>}
           </div>
 
           <FieldTextarea
@@ -422,8 +554,15 @@ function ProfilePage({ profile, onSave, onBack }) {
 
           {/* ─ Interests ─ */}
           <SectionLabel>INTERESTS — shown in Crew Mode</SectionLabel>
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 7, marginBottom: 20 }}>
-            {INTEREST_OPTIONS.map(s => <Chip key={s} active={form.interests.includes(s)} onClick={() => tog("interests", s)}>{s}</Chip>)}
+          <div style={{ marginBottom: 20 }}>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 7, marginBottom: 12 }}>
+              {INTEREST_OPTIONS.map(s => <Chip key={s} active={form.interests.includes(s)} onClick={() => tog("interests", s)}>{s}</Chip>)}
+            </div>
+            <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
+              <input value={customInterest} onChange={e => setCustomInterest(e.target.value)} onKeyPress={e => e.key === "Enter" && addCustomInterest()} placeholder="Add custom interest..." style={{ flex: 1, padding: "8px 12px", fontSize: 12, color: C.ink, background: C.surface, border: `1px solid ${C.rule}`, outline: "none" }} onFocus={e => e.target.style.borderColor = C.lime} onBlur={e => e.target.style.borderColor = C.rule} />
+              <button onClick={addCustomInterest} style={{ padding: "8px 16px", fontSize: 11, background: C.ink, color: C.bg, border: "none", cursor: "pointer" }}>ADD</button>
+            </div>
+            {form.interests.filter(s => !INTEREST_OPTIONS.includes(s)).length > 0 && <div style={{ display: "flex", flexWrap: "wrap", gap: 7, marginTop: 12 }}>{form.interests.filter(s => !INTEREST_OPTIONS.includes(s)).map(s => <Chip key={s} active={true} onClick={() => tog("interests", s)}>{s}</Chip>)}</div>}
           </div>
 
           <SectionDivider />
@@ -448,7 +587,7 @@ function ProfilePage({ profile, onSave, onBack }) {
                 <div key={c} onClick={() => u("commitment", c)} style={{ padding: "13px 18px", border: form.commitment === c ? `2px solid ${C.ink}` : `1px solid ${C.rule}`, background: form.commitment === c ? C.ink : C.surface, cursor: "pointer", display: "flex", gap: 16, alignItems: "center", transition: "all 0.12s" }}>
                   <D size={15} color={form.commitment === c ? C.lime : C.muted} style={{ flexShrink: 0 }}>{c}</D>
                   <span style={{ fontSize: 12, color: form.commitment === c ? "#7a9a6a" : C.muted, lineHeight: 1.5 }}>
-                    {c === "CASUAL" ? "A few hours a week, fits around coursework" : c === "SERIOUS" ? "Consistent effort, aiming to ship something real" : "Startup-track — applying to Velocity or W+Accelerate"}
+                    {c === "CASUAL" ? "A few hours a week, fits around coursework" : c === "SERIOUS" ? "Consistent effort, aiming to ship something real" : "Startup-track — full commitment"}
                   </span>
                 </div>
               ))}
@@ -457,7 +596,7 @@ function ProfilePage({ profile, onSave, onBack }) {
 
           {/* Save */}
           <div style={{ marginTop: 40, paddingTop: 28, borderTop: `1px solid ${C.rule}`, display: "flex", gap: 12, alignItems: "center" }}>
-            <button onClick={handleSave} style={{ fontSize: 12, letterSpacing: "0.1em", fontWeight: 700, padding: "12px 32px", border: "none", background: C.lime, color: C.limeInk, cursor: "pointer" }}>SAVE CHANGES</button>
+            <button onClick={handleSave} disabled={loading} style={{ fontSize: 12, letterSpacing: "0.1em", fontWeight: 700, padding: "12px 32px", border: "none", background: loading ? C.rule : C.lime, color: C.limeInk, cursor: loading ? "default" : "pointer", opacity: loading ? 0.6 : 1 }}>{loading ? "SAVING..." : "SAVE CHANGES"}</button>
             <button onClick={onBack} style={{ fontSize: 12, padding: "12px 24px", border: `1px solid ${C.rule}`, background: "transparent", color: C.muted, cursor: "pointer" }}>CANCEL</button>
             {saved && <M style={{ fontSize: 12, color: C.limeDark }}>✓ Changes saved!</M>}
           </div>
@@ -467,7 +606,7 @@ function ProfilePage({ profile, onSave, onBack }) {
   );
 }
 
-function MainApp() {
+function MainApp({ userId: propUserId, initialProfile }) {
   const [mode, setMode] = useState("BUILD");
   const [projects, setProjects] = useState([]);
   const [activities, setActivities] = useState([]);
@@ -476,7 +615,38 @@ function MainApp() {
   const [showPost, setShowPost] = useState(false);
   const [filter, setFilter] = useState("ALL");
   const [showProfile, setShowProfile] = useState(false);
-  const [profile, setProfile] = useState({ name: "", email: "", discipline: "", year: "", skills: [], interests: [], built: "", terms: [], commitment: "", github: "" });
+  const [profile, setProfile] = useState(initialProfile || { name: "", email: "", discipline: "", year: "", skills: [], interests: [], built: "", terms: [], commitment: "", github: "" });
+  const [userId, setUserId] = useState(propUserId);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (userId) {
+      api.getProfile(userId).then(data => {
+        setProfile(data);
+      }).catch(err => {
+        console.error("Failed to load profile:", err);
+      });
+    }
+  }, [userId]);
+
+  useEffect(() => {
+    if (userId) {
+      setLoading(true);
+      api.getProjects(mode, userId).then(data => {
+        if (mode === "BUILD") {
+          setProjects(data);
+          setSelectedId(data[0]?.id || null);
+        } else {
+          setActivities(data);
+          setSelectedId(data[0]?.id || null);
+        }
+        setLoading(false);
+      }).catch(err => {
+        console.error("Failed to load projects:", err);
+        setLoading(false);
+      });
+    }
+  }, [mode, userId]);
 
   const items = mode === "BUILD" ? projects : activities;
   const filtered = filter === "YOURS" ? items.filter(i => i.yours) : filter === "ALL" ? items : items.filter(i => !i.yours);
@@ -484,14 +654,40 @@ function MainApp() {
   const openRoles = sel?.roles?.filter(r => !r.filled) || [];
   const filledRoles = sel?.roles?.filter(r => r.filled) || [];
   const switchMode = m => { setMode(m); setSelectedId(items.length > 0 ? items[0]?.id : null); setTab(m === "BUILD" ? "ROLES" : "SPOTS"); setFilter("ALL"); };
-  const handlePost = item => { if (mode === "BUILD") { setProjects(p => [...p, item]); setSelectedId(item.id); setTab("ROLES"); } else { setActivities(a => [...a, item]); setSelectedId(item.id); setTab("SPOTS"); } };
+  const handlePost = async (item) => {
+    if (!userId) { alert("Please log in first"); return; }
+    try {
+      const created = await api.createProject(item, userId);
+      if (mode === "BUILD") {
+        setProjects(p => [created, ...p]);
+        setSelectedId(created.id);
+        setTab("ROLES");
+      } else {
+        setActivities(a => [created, ...a]);
+        setSelectedId(created.id);
+        setTab("SPOTS");
+      }
+    } catch (err) {
+      alert("Failed to create post: " + (err.message || "Unknown error"));
+    }
+  };
 
-  if (showProfile) return <ProfilePage profile={profile} onSave={p => { setProfile(p); }} onBack={() => setShowProfile(false)} />;
+  const handleApply = async (postId) => {
+    if (!userId) { alert("Please log in first"); return; }
+    try {
+      await api.submitApplication(postId, userId);
+      alert("Application submitted!");
+    } catch (err) {
+      alert("Failed to submit application: " + (err.message || "Unknown error"));
+    }
+  };
+
+  if (showProfile) return <ProfilePage profile={profile} onSave={p => { setProfile(p); }} onBack={() => setShowProfile(false)} userId={userId} />;
 
   return (
     <div style={{ minHeight: "100vh", background: C.bg, color: C.ink, display: "flex", flexDirection: "column", fontFamily: "'IBM Plex Mono',monospace" }}>
       <style>{BASE_CSS}</style>
-      {showPost && <PostModal mode={mode} onClose={() => setShowPost(false)} onSubmit={handlePost} />}
+      {showPost && <PostModal mode={mode} onClose={() => setShowPost(false)} onSubmit={handlePost} userId={userId} />}
 
       {/* ── TOP BAR ── */}
       <div style={{ display: "flex", alignItems: "stretch", borderBottom: `1px solid ${C.rule}`, height: 52, flexShrink: 0, background: C.bg }}>
@@ -537,7 +733,8 @@ function MainApp() {
             </button>
           </div>
           <div style={{ flex: 1, overflowY: "auto" }}>
-            {filtered.length === 0 && <div style={{ padding: "40px 20px", textAlign: "center" }}><M style={{ fontSize: 12, color: C.muted, lineHeight: 1.6 }}>No {mode === "BUILD" ? "projects" : "activities"} yet.<br />Post one to get started.</M></div>}
+            {loading && <div style={{ padding: "40px 20px", textAlign: "center" }}><M style={{ fontSize: 12, color: C.muted }}>Loading...</M></div>}
+            {!loading && filtered.length === 0 && <div style={{ padding: "40px 20px", textAlign: "center" }}><M style={{ fontSize: 12, color: C.muted, lineHeight: 1.6 }}>No {mode === "BUILD" ? "projects" : "activities"} yet.<br />Post one to get started.</M></div>}
             {filtered.map(item => {
               const isSel = selectedId === item.id;
               const open = item.roles?.filter(r => !r.filled).length ?? item.spots;
@@ -584,7 +781,6 @@ function MainApp() {
                 <div style={{ flex: 1, minWidth: 0, paddingRight: 24 }}>
                   <div style={{ display: "flex", gap: 8, marginBottom: 12, flexWrap: "wrap", alignItems: "center" }}>
                     {sel.yours && <M style={{ fontSize: 10, background: C.limeLight, color: C.limeDark, border: `1px solid ${C.lime}`, padding: "3px 10px", letterSpacing: "0.08em" }}>YOUR PROJECT</M>}
-                    {sel.velocity && <M style={{ fontSize: 10, color: "#996600", border: "1px solid #cc880044", background: "#fff8e0", padding: "3px 10px" }}>⚡ VELOCITY</M>}
                     {sel.stage && <M style={{ fontSize: 10, color: C.muted, border: `1px solid ${C.rule}`, padding: "3px 10px" }}>{sel.stage}</M>}
                     {sel.commitment && <M style={{ fontSize: 10, color: C.muted, border: `1px solid ${C.rule}`, padding: "3px 10px" }}>{sel.commitment}</M>}
                     {sel.type && <M style={{ fontSize: 10, color: C.muted, border: `1px solid ${C.rule}`, padding: "3px 10px" }}>{sel.type}</M>}
@@ -623,14 +819,14 @@ function MainApp() {
                           {role.filled && <M style={{ fontSize: 11, color: C.lime, display: "block", marginBottom: 6 }}>→ {role.member}</M>}
                           <div style={{ display: "flex", gap: 5, flexWrap: "wrap" }}>{role.skills?.map(s => <M key={s} style={{ fontSize: 9, color: C.muted, border: `1px solid ${C.rule}`, padding: "2px 6px" }}>{s}</M>)}</div>
                         </div>
-                        {!role.filled && <M style={{ fontSize: 10, color: C.lime, border: `1px solid ${C.lime}`, padding: "4px 12px", cursor: "pointer", letterSpacing: "0.06em", flexShrink: 0, marginTop: 2 }}>APPLY</M>}
+                        {!role.filled && !sel.yours && <M onClick={() => handleApply(sel.id)} style={{ fontSize: 10, color: C.lime, border: `1px solid ${C.lime}`, padding: "4px 12px", cursor: "pointer", letterSpacing: "0.06em", flexShrink: 0, marginTop: 2 }}>APPLY</M>}
                       </div>
                     ))}
                     {mode === "CREW" && [...Array(sel.spots || 0)].map((_, i) => (
                       <div key={i} style={{ display: "flex", alignItems: "center", gap: 14, padding: "13px 0", borderBottom: `1px solid ${C.rule}` }}>
                         <div style={{ width: 8, height: 8, border: `1px solid ${C.rule}` }} />
                         <span style={{ fontSize: 13, color: C.body, flex: 1 }}>Open spot {i + 1}</span>
-                        <M style={{ fontSize: 10, color: C.lime, border: `1px solid ${C.lime}`, padding: "4px 12px", cursor: "pointer" }}>JOIN</M>
+                        {!sel.yours && <M onClick={() => handleApply(sel.id)} style={{ fontSize: 10, color: C.lime, border: `1px solid ${C.lime}`, padding: "4px 12px", cursor: "pointer" }}>JOIN</M>}
                       </div>
                     ))}
                     {mode === "CREW" && sel.tags && <div style={{ display: "flex", gap: 6, marginTop: 16, flexWrap: "wrap" }}>{sel.tags.map(t => <M key={t} style={{ fontSize: 10, color: C.muted, border: `1px solid ${C.rule}`, padding: "3px 9px" }}>{t}</M>)}</div>}
@@ -641,7 +837,7 @@ function MainApp() {
                         <M style={{ fontSize: 10, color: C.limeDark, letterSpacing: "0.12em", display: "block", marginBottom: 10 }}>{mode === "BUILD" ? "YOU FIT THIS ROLE" : "YOU CAN JOIN"}</M>
                         <p style={{ fontSize: 14, color: C.ink, marginBottom: 6 }}>{mode === "BUILD" ? `${openRoles.length} open role${openRoles.length !== 1 ? "s" : ""} match your skills` : `${sel.spots} spot${sel.spots !== 1 ? "s" : ""} open this term`}</p>
                         <p style={{ fontSize: 12, color: C.body, marginBottom: 20, lineHeight: 1.5 }}>{mode === "BUILD" ? "Your React + ML/AI skills fit the Backend Dev role" : "Your schedule overlaps for 3 terms"}</p>
-                        <button style={{ width: "100%", padding: "12px", fontSize: 12, letterSpacing: "0.1em", fontWeight: 700, background: C.lime, color: C.limeInk, border: "none", cursor: "pointer" }}>{mode === "BUILD" ? "REQUEST TO JOIN →" : "EXPRESS INTEREST →"}</button>
+                        <button onClick={() => handleApply(sel.id)} style={{ width: "100%", padding: "12px", fontSize: 12, letterSpacing: "0.1em", fontWeight: 700, background: C.lime, color: C.limeInk, border: "none", cursor: "pointer" }}>{mode === "BUILD" ? "REQUEST TO JOIN →" : "EXPRESS INTEREST →"}</button>
                       </div>
                     )}
                     {sel.yours && (
@@ -694,7 +890,7 @@ function MainApp() {
               {tab === "INFO" && (
                 <div style={{ maxWidth: 520 }}>
                   <M style={{ fontSize: 11, color: C.muted, letterSpacing: "0.1em", display: "block", marginBottom: 20 }}>PROJECT INFO</M>
-                  {[["Name", sel.name], ["Tagline", sel.tagline], ["Category", sel.category], ["Stage", sel.stage || sel.type], ["Commitment", sel.commitment || "—"], ["Velocity Track", sel.velocity ? "Yes" : "No"]].map(([k, v]) => (
+                  {[["Name", sel.name], ["Tagline", sel.tagline], ["Category", sel.category], ["Stage", sel.stage || sel.type], ["Commitment", sel.commitment || "—"]].map(([k, v]) => (
                     <div key={k} style={{ display: "flex", gap: 24, borderBottom: `1px solid ${C.rule}`, padding: "11px 0" }}>
                       <M style={{ width: 140, fontSize: 11, color: C.muted, flexShrink: 0 }}>{k}</M>
                       <M style={{ fontSize: 12, color: C.ink, lineHeight: 1.5 }}>{v}</M>
@@ -712,8 +908,11 @@ function MainApp() {
 
 export default function App() {
   const [screen, setScreen] = useState("landing");
-  if (screen === "login") return <Login onBack={() => setScreen("landing")} onSuccess={() => setScreen("app")} />;
-  if (screen === "onboarding") return <Onboarding onComplete={() => setScreen("app")} />;
-  if (screen === "app") return <MainApp />;
+  const [userId, setUserId] = useState(null);
+  const [userProfile, setUserProfile] = useState(null);
+
+  if (screen === "login") return <Login onBack={() => setScreen("landing")} onSuccess={(id, user) => { setUserId(id); setUserProfile(user); setScreen("app"); }} />;
+  if (screen === "onboarding") return <Onboarding onComplete={(id, user) => { setUserId(id); setUserProfile(user); setScreen("app"); }} />;
+  if (screen === "app") return <MainApp userId={userId} initialProfile={userProfile} />;
   return <Landing onLogin={() => setScreen("login")} onSignup={() => setScreen("onboarding")} />;
 }
